@@ -14,7 +14,7 @@ namespace LoadTester
         
         static void Main(string[] args)
         {
-            //args = new string[] { "10.6.248.10", "1414", "CHANNEL1", "MQGD", @"C:\Users\d67784\Documents\GitHub\BNA\Cliente_HCS\ClienteHCS_2\bin\Debug\EjemploTransaccionesHCS\CU1_TRX500.hcs"};
+            args = new string[] { "10.6.248.10", "1414", "CHANNEL1", "MQGD", @"C:\Users\d67784\Documents\GitHub\BNA\Cliente_HCS\ClienteHCS_2\bin\Debug\EjemploTransaccionesHCS\CU2_TRX559.hcs"};
 
             if (args.Length < 5)
             {
@@ -95,7 +95,7 @@ namespace LoadTester
             var scenario1 = Scenarios.ScenarioEnviarRecibir(qmgr, outputQueue, inputQueue, mensaje)
                      .WithWarmUpDuration(TimeSpan.FromSeconds(5))
                      .WithLoadSimulations(
-                                         Simulation.Inject(rate: 100,
+                                         Simulation.Inject(rate: 10,
                                          interval: TimeSpan.FromSeconds(1),
                                          during: TimeSpan.FromSeconds(30))
                  );
@@ -103,7 +103,7 @@ namespace LoadTester
             var scenario2 = Scenarios.ScenarioSoloEnviar(qmgr, outputQueue, mensaje)
               .WithWarmUpDuration(TimeSpan.FromSeconds(5))
               .WithLoadSimulations(
-                                  Simulation.Inject(rate: 100,
+                                  Simulation.Inject(rate: 2000,
                                   interval: TimeSpan.FromSeconds(1),
                                   during: TimeSpan.FromSeconds(30))
           );
