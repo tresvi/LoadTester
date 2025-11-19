@@ -4,7 +4,7 @@ using IBM.WMQ;
 
 namespace LoadTester.Plugins
 {
-    internal class IbmMQPlugin
+    public class IbmMQPlugin
     {
         /// <summary>
         /// Realiza un ciclo de PUT sobre la cola de salida y GET sobre la cola de entrada utilizando el texto provisto y devuelve la latencia en ms.
@@ -52,8 +52,13 @@ namespace LoadTester.Plugins
                 int openOutOptions = MQC.MQOO_OUTPUT | MQC.MQOO_FAIL_IF_QUIESCING;
                 int openInOptions = MQC.MQOO_INPUT_AS_Q_DEF | MQC.MQOO_FAIL_IF_QUIESCING;
 
+                Stopwatch swAccessQueue = new Stopwatch();
+                swAccessQueue.Start();
+
                 queueOut = qmgr.AccessQueue(outputQueueName, openOutOptions);
                 queueIn = qmgr.AccessQueue(inputQueueName, openInOptions);
+                swAccessQueue.Stop();
+                System.Console.WriteLine($"AccesQueue {swAccessQueue.ElapsedMilliseconds}");
 
                 // --- PUT ---
                 msgPut.ClearMessage();
@@ -88,7 +93,7 @@ namespace LoadTester.Plugins
                 }
 
                 long t1 = Stopwatch.GetTimestamp();
-                double cicloMs = 10;//= (t1 - t0) * 1000.0 / Stopwatch.Frequency;
+                double cicloMs = (t1 - t0) * 1000.0 / Stopwatch.Frequency;
               //  Console.WriteLine($"Tiempo de ciclo: {cicloMs}");
 
                 return cicloMs;
@@ -107,16 +112,19 @@ namespace LoadTester.Plugins
             => (double)ticks * 1_000_000.0 / Stopwatch.Frequency;
 
 
-        static void EnviarMensaje(MQQueueManager qmgr, string queueName, string texto)
+        public static double EnviarMensaje(MQQueueManager qmgr, string queueName, string texto)
         {
             MQQueue? cola = null;
-
+            Stopwatch sw = new Stopwatch();
             try
             {
                 // Abrir la cola con opción de salida (PUT)
                 int openOptions = MQC.MQOO_OUTPUT;
                 cola = qmgr.AccessQueue(queueName, openOptions);
+                sw.Start();
                 EnviarMensaje(cola, texto);
+                sw.Stop();
+                return sw.ElapsedMilliseconds;
             }
             catch (MQException mqe)
             {
@@ -137,12 +145,9 @@ namespace LoadTester.Plugins
             }
         }
 
-        static void EnviarMensaje(MQQueue queue, string texto)
+        public static void EnviarMensaje(MQQueue queue, string texto)
         {
-            if (queue is null)
-            {
-                throw new ArgumentNullException(nameof(queue));
-            }
+            if (queue is null) throw new ArgumentNullException(nameof(queue));
 
             // Crear el mensaje MQ
             MQMessage mensaje = new MQMessage
@@ -165,7 +170,7 @@ namespace LoadTester.Plugins
         }
 
 
-        static void LeerMensaje(MQQueueManager qmgr, string queueName)
+        public static void RecibirMensaje(MQQueueManager qmgr, string queueName)
         {
             MQQueue? cola = null;
 
@@ -173,23 +178,7 @@ namespace LoadTester.Plugins
             {
                 int openOptions = MQC.MQOO_INPUT_AS_Q_DEF;
                 cola = qmgr.AccessQueue(queueName, openOptions);
-
-                var msg = new MQMessage
-                {
-                    CharacterSet = 1208,           // <— pedir UTF-8
-                    Format = MQC.MQFMT_STRING
-                };
-
-                var gmo = new MQGetMessageOptions
-                {
-                    Options = MQC.MQGMO_WAIT | MQC.MQGMO_CONVERT,
-                    WaitInterval = 5000
-                };
-
-                cola.Get(msg, gmo);
-
-                string contenido = msg.ReadString(msg.MessageLength);
-               // Console.WriteLine($"✅ GET: {contenido}");
+                RecibirMensaje(cola);
             }
             catch (MQException mqe) when (mqe.ReasonCode == MQC.MQRC_NO_MSG_AVAILABLE)
             {
@@ -208,6 +197,67 @@ namespace LoadTester.Plugins
                 cola?.Close();
             }
         }
+
+        public static void RecibirMensaje(MQQueue queue)
+        {
+            if (queue is null) throw new ArgumentNullException(nameof(queue));
+
+            var msg = new MQMessage
+            {
+                CharacterSet = 1208,           // <— pedir UTF-8
+                Format = MQC.MQFMT_STRING
+            };
+
+            var gmo = new MQGetMessageOptions
+            {
+                Options = MQC.MQGMO_WAIT | MQC.MQGMO_CONVERT,
+                WaitInterval = 5000
+            };
+
+            queue.Get(msg, gmo);
+
+            string contenido = msg.ReadString(msg.MessageLength);
+            // Console.WriteLine($"✅ GET: {contenido}");
+        }
+
+
+        public static int GetDepth(MQQueueManager queueMgr, string queueName)
+        {
+            MQQueue queue = OpenOutputQueue(queueMgr, queueName, true);
+            return queue.CurrentDepth;
+        }
+
+
+        public static int GetMaxDepth(MQQueueManager queueMgr, string queueName)
+        {
+            MQQueue queue = OpenOutputQueue(queueMgr, queueName, true);
+            return queue.MaximumDepth;
+        }
+
+
+        public static MQQueue OpenOutputQueue(MQQueueManager qManager, string QueueName, bool Inquire)
+        {
+            MQQueue q;
+
+            //Abrir una cola de salida (para hacer put)
+            if (Inquire)
+                q = qManager.AccessQueue(QueueName, MQC.MQOO_OUTPUT + MQC.MQOO_FAIL_IF_QUIESCING + MQC.MQOO_INQUIRE);
+            else
+                q = qManager.AccessQueue(QueueName, MQC.MQOO_OUTPUT + MQC.MQOO_FAIL_IF_QUIESCING);
+
+            return q;
+        }
+
+
+        public static MQQueue OpenInputQueue(MQQueueManager qManager, string QueueName)
+        {
+            MQQueue q;
+            //Abrir la cola de entrada (para hacer get).
+            q = qManager.AccessQueue(QueueName, MQC.MQOO_INPUT_SHARED + MQC.MQOO_FAIL_IF_QUIESCING);
+            return q;
+        }
+
+
 
     }
 }

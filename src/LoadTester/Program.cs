@@ -9,32 +9,36 @@ namespace LoadTester
         
         static void Main(string[] args)
         {
+            const string MENSAJE = "Carga NBomber MQ";
+            const string OUTPUT_QUEUE = "BNA.XX1.PEDIDO";
+            const string INPUT_QUEUE = "BNA.XX1.PEDIDO";
+
+
             var properties = new Hashtable
             {
-                { MQC.HOST_NAME_PROPERTY, "192.168.0.15" },
-                //{ MQC.HOST_NAME_PROPERTY, "10.6.248.10" },
+                //{ MQC.HOST_NAME_PROPERTY, "192.168.0.15" },
+                { MQC.HOST_NAME_PROPERTY, "10.6.248.10" },
                 { MQC.PORT_PROPERTY, 1414 },
                 { MQC.CHANNEL_PROPERTY, "CHANNEL1" },/*
                 { MQC.TRANSPORT_PROPERTY, MQC.TRANSPORT_MQSERIES_CLIENT } // conexión remota tipo cliente
                */
             };
 
+            MQQueueManager qmgr = new MQQueueManager("MQGD", properties);
+
             var operacionService = new OperacionService();
 
-            MQQueueManager qmgr = new MQQueueManager("MQGD", properties);
-            const string mensaje = "Carga NBomber MQ";
-            const string outputQueue = "BNA.XX1.PEDIDO";
-            const string inputQueue = "BNA.XX1.PEDIDO";
-
-            var scenario = Scenario.Create("http_scenario", async context =>
+            var scenario = Scenario.Create("ibmmq_scenario", async context =>
             {
                 try
                 {
                     /*var resultado = await operacionService.Ejecutar();
                     return resultado == 1 ? Response.Ok() : Response.Fail();*/
 
-                    double ms = Plugins.IbmMQPlugin.EnviarRecibir(qmgr, outputQueue, inputQueue, mensaje);
-                    return Response.Ok(statusCode: "200", sizeBytes: mensaje.Length, customLatencyMs: ms);
+                    //double ms = Plugins.IbmMQPlugin.EnviarRecibir(qmgr, OUTPUT_QUEUE, INPUT_QUEUE, MENSAJE);
+                    double ms = Plugins.IbmMQPlugin.EnviarMensaje(qmgr, OUTPUT_QUEUE, MENSAJE);
+                    double ms = Plugins.IbmMQPlugin.RecibirMensaje(qmgr, INPUT_QUEUE, MENSAJE);
+                    return Response.Ok(statusCode: "200", sizeBytes: MENSAJE.Length, customLatencyMs: ms);
                 }
                 catch
                 {
@@ -43,7 +47,7 @@ namespace LoadTester
             })
             .WithoutWarmUp()
             .WithLoadSimulations(
-                Simulation.Inject(rate: 10, 
+                Simulation.Inject(rate: 100, 
                                   interval: TimeSpan.FromSeconds(1), 
                                   during: TimeSpan.FromSeconds(30))
             );
