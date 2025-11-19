@@ -12,4 +12,13 @@
 	    <PackageReference Include="NBomber" Version="6.2.0-beta.3" />
     </ItemGroup>
 
+    <ItemGroup>
+      <None Update="EjemplosTransacciones\CU1_TRX500.hcs">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="EjemplosTransacciones\CU2_TRX559.hcs">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+    </ItemGroup>
+
 </Project>

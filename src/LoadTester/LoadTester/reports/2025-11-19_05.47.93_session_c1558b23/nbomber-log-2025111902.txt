@@ -1,0 +1,43 @@
+2025-11-19 02:47:03.030 -03:00 [INF] [ThreadId:1] NBomber 6.2.0 started a new session: 2025-11-19_05.47.93_session_c1558b23
+2025-11-19 02:47:03.119 -03:00 [INF] [ThreadId:1] NBomber started as single node
+2025-11-19 02:47:03.123 -03:00 [INF] [ThreadId:1] License validation....
+2025-11-19 02:47:03.124 -03:00 [WRN] [ThreadId:1] THIS VERSION IS FREE ONLY FOR PERSONAL USE. You can't use it for an organization.
+2025-11-19 02:47:03.151 -03:00 [INF] [ThreadId:1] Reports folder: C:\Users\d67784\Documents\GitHub\tresvi\LoadTester\src\LoadTester\LoadTester\bin\Debug\net8.0\reports\2025-11-19_05.47.93_session_c1558b23
+2025-11-19 02:47:03.152 -03:00 [INF] [ThreadId:1] Plugins: no plugins were loaded
+2025-11-19 02:47:03.153 -03:00 [INF] [ThreadId:1] Reporting sinks: no reporting sinks were loaded
+2025-11-19 02:47:03.154 -03:00 [INF] [ThreadId:1] Starting init...
+2025-11-19 02:47:03.172 -03:00 [INF] [ThreadId:1] Target scenarios: ibmmq_send_receive
+2025-11-19 02:47:03.180 -03:00 [INF] [ThreadId:1] Init finished
+2025-11-19 02:47:03.298 -03:00 [INF] [ThreadId:1] Starting warm up...
+2025-11-19 02:47:03.301 -03:00 [INF] [ThreadId:1] Warm up for scenarios: ibmmq_send_receive
+2025-11-19 02:47:03.311 -03:00 [INF] [ThreadId:1] Warm up duration: 00:00:05
+2025-11-19 02:47:14.410 -03:00 [INF] [ThreadId:12] Starting bombing...
+2025-11-19 02:48:35.716 -03:00 [INF] [ThreadId:13] Stopping scenarios...
+2025-11-19 02:48:35.830 -03:00 [INF] [ThreadId:13] Calculating final statistics...
+2025-11-19 02:48:38.141 -03:00 [ERR] [ThreadId:13] TxtReport.print failed
+System.IO.FileNotFoundException: Could not load file or assembly 'ConsoleTables, Version=2.0.0.0, Culture=neutral, PublicKeyToken=null'. El sistema no puede encontrar el archivo especificado.
+File name: 'ConsoleTables, Version=2.0.0.0, Culture=neutral, PublicKeyToken=null'
+   at NBomber.DomainServices.Reports.TxtReport.TxtNodeStats.printStepStatsTable(Boolean isOkStats, ScenarioStats scnStats)
+   at NBomber.DomainServices.Reports.TxtReport.TxtNodeStats.printScenarioStats(ScenarioStats scnStats, FSharpList`1 simulations)
+   at NBomber.DomainServices.Reports.TxtReport.TxtNodeStats.print@84.Invoke(ScenarioStats scnStats)
+   at Microsoft.FSharp.Collections.Internal.IEnumerator.map@128.DoMoveNext(b& curr) in D:\a\_work\1\s\src\FSharp.Core\seq.fs:line 130
+   at Microsoft.FSharp.Collections.Internal.IEnumerator.MapEnumerator`1.System.Collections.IEnumerator.MoveNext() in D:\a\_work\1\s\src\FSharp.Core\seq.fs:line 113
+   at Microsoft.FSharp.Core.CompilerServices.RuntimeHelpers.takeOuter@319[T,TResult](ConcatEnumerator`2 x, Unit unitVar0) in D:\a\_work\1\s\src\FSharp.Core\seqcore.fs:line 320
+   at System.String.Join(String separator, IEnumerable`1 values)
+   at NBomber.DomainServices.Reports.TxtReport.TxtNodeStats.print(NodeStats stats, IDictionary`2 loadSimulations)
+   at NBomber.DomainServices.Reports.TxtReport.print(ILogger logger, NodeSessionResult sessionResult, IDictionary`2 simulations)
+2025-11-19 02:48:38.697 -03:00 [ERR] [ThreadId:13] Report.save failed
+System.IO.FileNotFoundException: Could not load file or assembly 'FuncyDown, Version=1.4.2.0, Culture=neutral, PublicKeyToken=null'. El sistema no puede encontrar el archivo especificado.
+File name: 'FuncyDown, Version=1.4.2.0, Culture=neutral, PublicKeyToken=null'
+   at NBomber.DomainServices.Reports.MdReport.print(ILogger logger, NodeSessionResult sessionResult, IDictionary`2 simulations)
+   at NBomber.DomainServices.Reports.Report.build@98-3.Invoke(Unit unitVar)
+   at System.Lazy`1.ViaFactory(LazyThreadSafetyMode mode)
+   at System.Lazy`1.ExecutionAndPublication(LazyHelper executionAndPublication, Boolean useDefaultConstructor)
+   at System.Lazy`1.CreateValue()
+   at NBomber.DomainServices.Reports.Report.buildReportFile@107.Invoke(ReportFormat format)
+   at Microsoft.FSharp.Collections.Internal.IEnumerator.map@128.DoMoveNext(b& curr) in D:\a\_work\1\s\src\FSharp.Core\seq.fs:line 131
+   at Microsoft.FSharp.Collections.Internal.IEnumerator.MapEnumerator`1.System.Collections.IEnumerator.MoveNext() in D:\a\_work\1\s\src\FSharp.Core\seq.fs:line 113
+   at Microsoft.FSharp.Collections.SeqModule.toArray$cont@1028[T](IEnumerator`1 e, Unit unitVar) in D:\a\_work\1\s\src\FSharp.Core\seq.fs:line 1032
+   at Microsoft.FSharp.Collections.SeqModule.ToArray[T](IEnumerable`1 source) in D:\a\_work\1\s\src\FSharp.Core\seq.fs:line 1027
+   at NBomber.DomainServices.Reports.Report.saveToFolder(IGlobalDependency dep, String folder, String fileName, FSharpList`1 reportFormats, ReportsContent report)
+2025-11-19 02:48:38.719 -03:00 [WRN] [ThreadId:13] THIS VERSION IS FREE ONLY FOR PERSONAL USE. You can't use it for an organization.

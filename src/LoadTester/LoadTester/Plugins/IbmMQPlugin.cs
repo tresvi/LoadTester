@@ -225,7 +225,7 @@ namespace LoadTester.Plugins
             long t1 = Stopwatch.GetTimestamp();
 
             string contenido = msg.ReadString(msg.MessageLength);
-            // Console.WriteLine($"✅ GET: {contenido}");
+            //Console.WriteLine($"✅ GET: {contenido}");
             return (t1 - t0) * 1000.0 / Stopwatch.Frequency;
         }
 

@@ -15,4 +15,10 @@
 		<ProjectReference Include="..\LoadTester\LoadTester.csproj" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <None Update="EjemplosDeInvocacion.txt">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	</ItemGroup>
+
 </Project>
