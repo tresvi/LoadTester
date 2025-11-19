@@ -13,6 +13,9 @@
     </ItemGroup>
 
     <ItemGroup>
+      <None Update="EjemplosDeInvocacion.txt">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
       <None Update="EjemplosTransacciones\CU1_TRX500.hcs">
         <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       </None>
