@@ -3,9 +3,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.10.35122.118
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LoadTester", "LoadTester\LoadTester.csproj", "{8D1720B4-3045-4AD1-9A1C-D2153121EE92}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LoadTester", "LoadTester\LoadTester.csproj", "{8D1720B4-3045-4AD1-9A1C-D2153121EE92}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MQQueueMonitor", "MQQueueMonitor\MQQueueMonitor.csproj", "{7069F366-5582-4E5D-8670-6AFA37558C3A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MQQueueMonitor", "MQQueueMonitor\MQQueueMonitor.csproj", "{7069F366-5582-4E5D-8670-6AFA37558C3A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StampedeLoadTester", "StampedeLoadTester\StampedeLoadTester.csproj", "{8C5A0A2A-6454-4F1B-B860-F48B3DF493CC}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +23,10 @@ Global
 		{7069F366-5582-4E5D-8670-6AFA37558C3A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7069F366-5582-4E5D-8670-6AFA37558C3A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7069F366-5582-4E5D-8670-6AFA37558C3A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8C5A0A2A-6454-4F1B-B860-F48B3DF493CC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8C5A0A2A-6454-4F1B-B860-F48B3DF493CC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8C5A0A2A-6454-4F1B-B860-F48B3DF493CC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8C5A0A2A-6454-4F1B-B860-F48B3DF493CC}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
