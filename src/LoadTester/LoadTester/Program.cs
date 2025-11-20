@@ -2,6 +2,9 @@ using IBM.WMQ;
 using NBomber.CSharp;
 using System.Collections;
 using LoadTester.Plugins;
+using System.Text;
+using System.Diagnostics;
+using System.Reflection;
 
 ///Ejemplo invocacion
 ///DESA:  LoadTester.exe 10.6.248.10 1414 CHANNEL1 MQGD "C:\Users\d67784\Documents\GitHub\BNA\Cliente_HCS\ClienteHCS_2\bin\Debug\EjemploTransaccionesHCS\CU1_TRX500.hcs"
@@ -14,7 +17,8 @@ namespace LoadTester
         
         static void Main(string[] args)
         {
-            args = new string[] { "10.6.248.10", "1414", "CHANNEL1", "MQGD", @"C:\Users\d67784\Documents\GitHub\BNA\Cliente_HCS\ClienteHCS_2\bin\Debug\EjemploTransaccionesHCS\CU2_TRX559.hcs"};
+            args = new string[] { "10.6.248.10", "1414", "CHANNEL1", "MQGD", @"C:\Users\d67784\Documents\GitHub\BNA\Cliente_HCS\ClienteHCS_2\bin\Debug\EjemploTransaccionesHCS\CU1_TRX500.hcs"};
+            //args = new string[] { "10.6.248.10", "1414", "CHANNEL1", "MQGD", @"C:\Users\d67784\Documents\GitHub\BNA\Cliente_HCS\ClienteHCS_2\bin\Debug\EjemploTransaccionesHCS\CU2_TRX559.hcs" };
 
             if (args.Length < 5)
             {
@@ -91,13 +95,70 @@ namespace LoadTester
                 Environment.Exit(1);
             }
 
-            //100 VUs/seg fijos durante 30 segundos. Es decir, se garantiza que haya 100 request en cada segundo.
+            MQQueue inquireQueue = IbmMQPlugin.OpenOutputQueue(qmgr, outputQueue, true);
+            int profundidad = inquireQueue.CurrentDepth;
+
+            /*
+            IbmMQPlugin.EnviarMensaje(qmgr, outputQueue, mensaje);
+            IbmMQPlugin.EnviarMensaje(qmgr, outputQueue, mensaje);
+            Stopwatch swEnviarMensaje = Stopwatch.StartNew();
+            IbmMQPlugin.EnviarMensaje(qmgr, outputQueue, mensaje);
+            swEnviarMensaje.Stop();
+            Console.WriteLine($"Demora {swEnviarMensaje.ElapsedMilliseconds} ms de EnviarMensaje, profundidad inicial: {profundidad}");
+            profundidad = 0;
+
+            Thread.Sleep(4000);
+
+            Stopwatch sw = new Stopwatch();
+            sw.Start();
+            int i;
+            for (i=0 ; i < 4000; i++)
+            {
+                if (sw.ElapsedMilliseconds < (1000 - swEnviarMensaje.ElapsedMilliseconds))
+                {
+                    IbmMQPlugin.EnviarMensaje(qmgr, outputQueue, mensaje);
+                    // Console.WriteLine($"{i} - {tiempoEnvio} - {Encoding.UTF8.GetString(messageId)}");
+                }
+                else
+                {
+                    sw.Stop();
+                    profundidad = inquireQueue.CurrentDepth;
+                    break;
+                }
+            }
+            
+            sw.Stop();
+            Console.WriteLine($"FIN: Tardó {sw.ElapsedMilliseconds} - Profundidad: {profundidad} - Msjes colocados: {i}");
+            qmgr.Close();
+            Environment.Exit(0);
+            */
+            //31 de Octubre: 345MB en colas MQ, 
+            /*
+             *En la CU2 respuesta hubo un estimado de 337.200 PUTs , 385MB en total y el mensaje mas grande fue de 1,45MB
+             * 1145 Bytes es el tamaño maximo del mensaje 337 200 mensajes estimados
+             * 20M transacciones 4M de login en 2HS en la 1ra semana de octubre.
+            5,9 pedido + 2.3 de espera en salida
+            El Soap UI de Guille, llega a 125 en la 559 y a 360 en 500. 280 cuando usa los 4 en una situacion fuera de lo comun
+            */
+            // Escenario con ramp up, período constante y ramp down usando RampingConstant
             var scenario1 = Scenarios.ScenarioEnviarRecibir(qmgr, outputQueue, inputQueue, mensaje)
                      .WithWarmUpDuration(TimeSpan.FromSeconds(5))
-                     .WithLoadSimulations(
-                                         Simulation.Inject(rate: 10,
-                                         interval: TimeSpan.FromSeconds(1),
-                                         during: TimeSpan.FromSeconds(30))
+                     .WithLoadSimulations(/*
+                         // Ramp up: aumentar de 0 a 1200 copias en 30 segundos
+                         Simulation.RampingConstant(
+                            copies: 1000,
+                            during: TimeSpan.FromSeconds(30)
+                         ),*/
+                         // Período constante: mantener 1200 copias durante 60 segundos
+                         Simulation.KeepConstant(
+                            copies: 5,
+                            during: TimeSpan.FromSeconds(100)
+                         )/*,
+                         // Ramp down: disminuir de 1200 a 0 copias en 30 segundos
+                         Simulation.RampingConstant(
+                            copies: 0,
+                            during: TimeSpan.FromSeconds(30)
+                         )*/
                  );
 
             var scenario2 = Scenarios.ScenarioSoloEnviar(qmgr, outputQueue, mensaje)

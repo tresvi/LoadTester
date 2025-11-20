@@ -9,6 +9,7 @@ namespace LoadTester.Plugins
         /// <summary>
         /// Escenario 1: Envío y recepción de mensajes MQ
         /// Mide el tiempo total de envío + recepción
+        /// Obtiene MessageID del PUT y lo usa como CorrelationID en el GET
         /// </summary>
         public static ScenarioProps ScenarioEnviarRecibir(MQQueueManager qmgr, string outputQueue, string inputQueue, string mensaje)
         {
@@ -16,8 +17,8 @@ namespace LoadTester.Plugins
             {
                 try
                 {
-                    double tiempoEnvio = IbmMQPlugin.EnviarMensaje(qmgr, outputQueue, mensaje);
-                    double tiempoRecepcion = IbmMQPlugin.RecibirMensaje(qmgr, inputQueue);
+                    var (tiempoEnvio, messageId) = IbmMQPlugin.EnviarMensaje(qmgr, outputQueue, mensaje);
+                    double tiempoRecepcion = IbmMQPlugin.RecibirMensaje(qmgr, inputQueue, messageId);
                     double tiempoTotal = tiempoRecepcion;       //Solo el tiempo E2E (descarta tiempo de PUT)
 
                     return Response.Ok(statusCode: "200", sizeBytes: mensaje.Length, customLatencyMs: tiempoTotal);
@@ -39,7 +40,7 @@ namespace LoadTester.Plugins
             {
                 try
                 {
-                    double tiempoEnvio = IbmMQPlugin.EnviarMensaje(qmgr, outputQueue, mensaje);
+                    var (tiempoEnvio, _) = IbmMQPlugin.EnviarMensaje(qmgr, outputQueue, mensaje);
                     return Response.Ok(statusCode: "200", sizeBytes: mensaje.Length, customLatencyMs: tiempoEnvio);
                 }
                 catch (Exception ex)

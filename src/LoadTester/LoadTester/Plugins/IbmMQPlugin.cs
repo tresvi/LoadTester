@@ -113,7 +113,7 @@ namespace LoadTester.Plugins
             => (double)ticks * 1_000_000.0 / Stopwatch.Frequency;
 
 
-        public static double EnviarMensaje(MQQueueManager qmgr, string queueName, string texto)
+        public static (double tiempoMs, byte[] messageId) EnviarMensaje(MQQueueManager qmgr, string queueName, string texto)
         {
             MQQueue? cola = null;
             Stopwatch sw = new Stopwatch();
@@ -123,8 +123,8 @@ namespace LoadTester.Plugins
                 int openOptions = MQC.MQOO_OUTPUT;
                 cola = qmgr.AccessQueue(queueName, openOptions);
                 
-                double ms = EnviarMensaje(cola, texto);
-                return ms;
+                (double tiempoMs, byte[] messageId) resultado = EnviarMensaje(cola, texto);
+                return resultado;
             }
             catch (MQException mqe)
             {
@@ -146,41 +146,46 @@ namespace LoadTester.Plugins
             }
         }
 
-        public static double EnviarMensaje(MQQueue queue, string texto)
+        public static (double tiempoMs, byte[] messageId) EnviarMensaje(MQQueue queue, string texto)
         {
             if (queue is null) throw new ArgumentNullException(nameof(queue));
 
             // Crear el mensaje MQ
             MQMessage mensaje = new MQMessage
             {
-                //CharacterSet = 1208, // UTF-8
-                Format = MQC.MQFMT_STRING
+                Format = MQC.MQFMT_STRING,
+                MessageId = MQC.MQMI_NONE,
+                CorrelationId = MQC.MQCI_NONE
             };
 
             mensaje.WriteString(texto);
 
-            // Opciones de envío (no persistente, sin espera)
+            // Opciones de envío: no persistente, sin espera, que asigne nuevo MessageID
             MQPutMessageOptions pmo = new MQPutMessageOptions
             {
-                Options = MQC.MQPMO_NO_SYNCPOINT // Envío inmediato, sin transacción
+                Options = MQC.MQPMO_NO_SYNCPOINT | MQC.MQPMO_NEW_MSG_ID
             };
 
             long t0 = Stopwatch.GetTimestamp();
             queue.Put(mensaje, pmo);
             long t1 = Stopwatch.GetTimestamp();
 
-            return (t1 - t0) * 1000.0 / Stopwatch.Frequency;
+            // Obtener el MessageID asignado por MQ
+            byte[] messageId = new byte[24];
+            Array.Copy(mensaje.MessageId, messageId, 24);
+
+            return ((t1 - t0) * 1000.0 / Stopwatch.Frequency, messageId);
         }
 
 
-        public static double RecibirMensaje(MQQueueManager qmgr, string queueName)
+        public static double RecibirMensaje(MQQueueManager qmgr, string queueName, byte[]? correlationId = null)
         {
             MQQueue? cola = null;
             try
             {
                 int openOptions = MQC.MQOO_INPUT_AS_Q_DEF;
                 cola = qmgr.AccessQueue(queueName, openOptions);
-                double ms = RecibirMensaje(cola);
+                double ms = RecibirMensaje(cola, correlationId);
                 return ms;
             }
             catch (MQException mqe) when (mqe.ReasonCode == MQC.MQRC_NO_MSG_AVAILABLE)
@@ -204,20 +209,32 @@ namespace LoadTester.Plugins
             }
         }
 
-        public static double RecibirMensaje(MQQueue queue)
+        public static double RecibirMensaje(MQQueue queue, byte[]? correlationId = null)
         {
             if (queue is null) throw new ArgumentNullException(nameof(queue));
 
             var msg = new MQMessage
             {
                 CharacterSet = 1208,           // <— pedir UTF-8
-                Format = MQC.MQFMT_STRING
+                Format = MQC.MQFMT_STRING,
+                MessageId = MQC.MQMI_NONE
             };
+
+            // Si se proporciona CorrelationID, usarlo para hacer match
+            if (correlationId != null && correlationId.Length == 24)
+            {
+                msg.CorrelationId = correlationId;
+            }
+            else
+            {
+                msg.CorrelationId = MQC.MQCI_NONE;
+            }
 
             var gmo = new MQGetMessageOptions
             {
                 Options = MQC.MQGMO_WAIT | MQC.MQGMO_CONVERT,
-                WaitInterval = 5000
+                WaitInterval = 5000,
+                MatchOptions = correlationId != null ? MQC.MQMO_MATCH_CORREL_ID : MQC.MQMO_NONE
             };
 
             long t0 = Stopwatch.GetTimestamp();
