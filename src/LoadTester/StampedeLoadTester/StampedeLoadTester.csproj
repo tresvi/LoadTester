@@ -27,7 +27,8 @@
     <TieredCompilationQuickJitForLoops>false</TieredCompilationQuickJitForLoops>
     
     <!-- Runtime optimizations -->
-    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- InvariantGlobalization deshabilitado porque IBM MQ requiere culturas específicas -->
+    <InvariantGlobalization>false</InvariantGlobalization>
     <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
     
     <!-- Server GC para mejor rendimiento en aplicaciones de alto rendimiento -->

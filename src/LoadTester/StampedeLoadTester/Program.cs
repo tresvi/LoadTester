@@ -20,19 +20,30 @@ namespace StampedeLoadTester
             var properties = new Hashtable
             {
                 { MQC.HOST_NAME_PROPERTY, "192.168.0.15" },
+                //{ MQC.HOST_NAME_PROPERTY, "10.6.248.10" },
                 { MQC.PORT_PROPERTY, 1414 },
                 { MQC.CHANNEL_PROPERTY, "CHANNEL1" },/*
                 { MQC.TRANSPORT_PROPERTY, MQC.TRANSPORT_MQSERIES_CLIENT } // conexión remota tipo cliente
                */
             };
 
-            MQQueueManager qmgr = null;
-            MQQueue outputQueue = null;
+            // Crear dos conexiones: una para hilos pares y otra para hilos impares
+            MQQueueManager qmgr1 = null;
+            MQQueueManager qmgr2 = null;
+            MQQueue outputQueue1 = null;
+            MQQueue outputQueue2 = null;
 
             try
             {
-                qmgr = new MQQueueManager("MQGD", properties);
-                outputQueue = IbmMQPlugin.OpenOutputQueue(qmgr, OUTPUT_QUEUE, false);
+                // Conexión 1 (para hilos pares: 0, 2, 4, ...)
+                qmgr1 = new MQQueueManager("MQGD", properties);
+                outputQueue1 = IbmMQPlugin.OpenOutputQueue(qmgr1, OUTPUT_QUEUE, false);
+                Console.WriteLine("Conexión 1 establecida");
+
+                // Conexión 2 (para hilos impares: 1, 3, 5, ...)
+                qmgr2 = new MQQueueManager("MQGD", properties);
+                outputQueue2 = IbmMQPlugin.OpenOutputQueue(qmgr2, OUTPUT_QUEUE, false);
+                Console.WriteLine("Conexión 2 establecida");
             }
             catch (Exception ex)
             {
@@ -40,49 +51,53 @@ namespace StampedeLoadTester
                 Environment.Exit(1);
             }
 
-            MQQueue inquireQueue = IbmMQPlugin.OpenOutputQueue(qmgr, OUTPUT_QUEUE, true);
+            // Consultar profundidad inicial usando la conexión 1
+            MQQueue inquireQueue = IbmMQPlugin.OpenOutputQueue(qmgr1, OUTPUT_QUEUE, true);
             int profundidad = inquireQueue.CurrentDepth;
+            inquireQueue.Close();
             long tiempoLimiteTicks = MillisecondsToTicks(TIEMPO_CARGA_MS);
 
-            
-            IbmMQPlugin.EnviarMensaje(outputQueue, MENSAJE);
-            IbmMQPlugin.EnviarMensaje(outputQueue, MENSAJE);
-            IbmMQPlugin.EnviarMensaje(outputQueue, MENSAJE);
+            // Envíos de prueba
+            IbmMQPlugin.EnviarMensaje(outputQueue1, MENSAJE);
+            IbmMQPlugin.EnviarMensaje(outputQueue2, MENSAJE);
+            IbmMQPlugin.EnviarMensaje(outputQueue1, MENSAJE);
             
             int messageCounter = 0;
             long tiempoFinalizacionTicks = Stopwatch.GetTimestamp() + tiempoLimiteTicks;
             long tiempoInicioTicks = Stopwatch.GetTimestamp();
 
             // Paralelizar el envío de mensajes usando Parallel.For
-            // Cada hilo ejecutará el loop hasta que se cumpla el tiempo límite
+            // Hilos pares (0, 2, 4...) usan conexión 1
+            // Hilos impares (1, 3, 5...) usan conexión 2
             int numHilos = Environment.ProcessorCount;
-
-/*            
-            while (Stopwatch.GetTimestamp() < tiempoFinalizacionTicks)
-            {
-                IbmMQPlugin.EnviarMensaje(outputQueue, MENSAJE);
-                messageCounter++;
-            }
-*/
+            Console.WriteLine($"Número de hilos: {numHilos}");
+            Console.WriteLine($"Profundidad inicial: {profundidad}");
 
             Parallel.For(0, numHilos, (hiloIndex) =>
             {
+                // Determinar qué conexión usar según si el hilo es par o impar
+                MQQueue queueActual = (hiloIndex % 2 == 0) ? outputQueue1 : outputQueue2;
+                int conexionNum = (hiloIndex % 2 == 0) ? 1 : 2;
+
                 while (Stopwatch.GetTimestamp() < tiempoFinalizacionTicks)
                 {
                     try
                     {
-                        IbmMQPlugin.EnviarMensaje(outputQueue, MENSAJE);
+                        IbmMQPlugin.EnviarMensaje(queueActual, MENSAJE);
                         Interlocked.Increment(ref messageCounter);
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"Error en hilo {hiloIndex}: {ex.Message}");
+                        Console.WriteLine($"Error en hilo {hiloIndex} (conexión {conexionNum}): {ex.Message}");
                     }
                 }
             });
 
-            outputQueue.Close();
-            qmgr.Close();
+            // Cerrar ambas conexiones
+            outputQueue1?.Close();
+            outputQueue2?.Close();
+            qmgr1?.Close();
+            qmgr2?.Close();
             Console.WriteLine($"FIN: Msjes colocados: {messageCounter}");
             Environment.Exit(0);
             
