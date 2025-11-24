@@ -14,15 +14,21 @@ namespace StampedeLoadTester
         {
             Console.WriteLine("Iniciando...");
 
-            var properties = new Hashtable
+            var properties1414 = new Hashtable
             {
-                //{ MQC.HOST_NAME_PROPERTY, "10.6.248.10" },
+                { MQC.HOST_NAME_PROPERTY, "192.168.0.15" },
+                { MQC.PORT_PROPERTY, 1414 },
+                { MQC.CHANNEL_PROPERTY, "CHANNEL1" },
+            };
+
+            var properties1415 = new Hashtable
+            {
                 { MQC.HOST_NAME_PROPERTY, "192.168.0.15" },
                 { MQC.PORT_PROPERTY, 1415 },
                 { MQC.CHANNEL_PROPERTY, "CHANNEL1" },
             };
 
-            using TestManager manager = new("MQGD", OUTPUT_QUEUE, MENSAJE, properties);
+            using TestManager manager = new("MQGD", OUTPUT_QUEUE, MENSAJE, properties1414, properties1415);
             manager.InicializarConexiones();
 
             using MQQueue inquireQueue = manager.AbrirQueueInquire();

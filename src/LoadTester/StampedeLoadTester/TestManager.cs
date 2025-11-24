@@ -12,17 +12,19 @@ internal sealed class TestManager : IDisposable
     private readonly string _queueManagerName;
     private readonly string _outputQueueName;
     private readonly string _mensaje;
-    private readonly Hashtable _properties;
+    private readonly Hashtable _propertiesPort1414;
+    private readonly Hashtable _propertiesPort1415;
 
     private readonly MQQueueManager?[] _queueManagers = new MQQueueManager?[4];
     private readonly MQQueue?[] _outputQueues = new MQQueue?[4];
 
-    public TestManager(string queueManagerName, string outputQueueName, string mensaje, Hashtable properties)
+    public TestManager(string queueManagerName, string outputQueueName, string mensaje, Hashtable propertiesPort1414, Hashtable propertiesPort1415)
     {
         _queueManagerName = queueManagerName;
         _outputQueueName = outputQueueName;
         _mensaje = mensaje;
-        _properties = properties;
+        _propertiesPort1414 = propertiesPort1414;
+        _propertiesPort1415 = propertiesPort1415;
     }
 
     public void InicializarConexiones()
@@ -31,7 +33,8 @@ internal sealed class TestManager : IDisposable
         {
             for (int i = 0; i < _queueManagers.Length; i++)
             {
-                _queueManagers[i] = new MQQueueManager(_queueManagerName, _properties);
+                Hashtable props = i < 2 ? _propertiesPort1414 : _propertiesPort1415;
+                _queueManagers[i] = new MQQueueManager(_queueManagerName, props);
                 _outputQueues[i] = IbmMQPlugin.OpenOutputQueue(_queueManagers[i]!, _outputQueueName, false);
                 Console.WriteLine($"Conexión {i + 1} establecida");
             }
