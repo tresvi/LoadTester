@@ -1,62 +1,90 @@
 # LoadTester
 
-LoadTester es una herramienta de línea de comandos para realizar pruebas de carga y medir el rendimiento de endpoints HTTP. Permite enviar muchas peticiones concurrentes, personalizar métodos, cabeceras y cuerpos, y recoger métricas clave como latencias, tasa de errores y throughput.
+LoadTester es una colección de herramientas y utilidades escritas en C# (.NET 8) para pruebas de carga y monitorización de colas IBM MQ. El proyecto usa NBomber para generar carga y capturar métricas, y el cliente `IBMMQDotnetClient` para integrarse con IBM MQ.
 
-Características
-- Envío de peticiones HTTP/HTTPS (GET, POST, PUT, DELETE, etc.).
-- Configuración de concurrencia (número de trabajadores) y número total de peticiones.
-- Soporte para cabeceras personalizadas y cuerpos de petición.
-- Métricas: tiempos p50/p95/p99, latencia media, tasa de éxito/errores, RPS (requests per second).
-- Exportación de resultados en formato JSON/CSV.
-- Salida en consola con resumen y detalles por petición (opcional).
+## Características principales
+- Generación de carga y métricas con NBomber.
+- Integración con IBM MQ para pruebas sobre colas.
+- Proyectos incluidos:
+  - src/LoadTester: generador de carga (aplicación principal).
+  - src/MonitorColasMQ: monitor de colas IBM MQ.
+  - src/LecturaProfundidadColasMQ: utilidades/solución auxiliar.
+- Reportes y resultados en la carpeta `reports` dentro del proyecto LoadTester.
 
-Requisitos
-- Go >= 1.18 (si el proyecto está escrito en Go) o Python >= 3.8 (ajusta según el lenguaje real del repositorio).
-- Conexión de red hacia los endpoints a testear.
+## Estado y dependencias
+- TargetFramework: net8.0 (.NET 8)
+- Paquetes relevantes (en src/LoadTester/LoadTester.csproj):
+  - IBMMQDotnetClient (cliente IBM MQ)
+  - NBomber (framework de carga/benchmarking)
 
-Instalación
+## Requisitos
+- .NET SDK 8.0 (https://dotnet.microsoft.com/)
+- Acceso a un IBM MQ al que conectar para pruebas reales.
+- (Opcional) Certificados/credenciales si IBM MQ está protegido con TLS/SSL.
+
+## Instalación y compilación
 1. Clona el repositorio:
 
    git clone https://github.com/tresvi/LoadTester.git
-
-2. Compila o instala según el lenguaje del proyecto. Ejemplo para Go:
-
    cd LoadTester
-   go build -o loadtester ./...
 
-Uso
-Ejemplo básico (envía 1000 peticiones con 50 concurrentes):
+2. Compila los proyectos relevantes:
 
-   ./loadtester --url https://example.com/api --requests 1000 --concurrency 50
+   dotnet build src/LoadTester
+   dotnet build src/MonitorColasMQ
 
-Opciones comunes
-- --url: URL objetivo.
-- --requests: número total de peticiones a enviar.
-- --concurrency: número de peticiones en paralelo.
-- --method: método HTTP (GET, POST, ...).
-- --header: cabeceras adicionales (puede repetirse).
-- --body: cuerpo de la petición (archivo o literal).
-- --output: ruta de salida para exportar resultados (JSON/CSV).
+Si existe una solución (.sln) en `src/LecturaProfundidadColasMQ`, puedes compilar la solución completa con:
 
-Salida y métricas
-Al finalizar, LoadTester muestra un resumen con:
-- Total de peticiones, exitosas y con error.
-- Latencia media y percentiles (p50, p95, p99).
-- Requests per second (RPS).
-- Distribución de códigos de estado HTTP.
+   dotnet build src/LecturaProfundidadColasMQ/LecturaProfundidadColasMQ.sln
 
-Ejemplo de exportación a JSON:
+## Ejecución
+- Ejecutar LoadTester (ejecución desde fuente):
 
-   ./loadtester --url https://example.com/api --requests 1000 --concurrency 50 --output resultados.json
+   dotnet run --project src/LoadTester -- [opciones]
 
-Contribuir
-Si quieres contribuir:
-- Abre un issue describiendo la mejora o bug.
-- Crea un branch para tu cambio y abre un pull request.
-- Asegúrate de añadir tests cuando sea posible.
+- Ejecutar MonitorColasMQ:
 
-Licencia
-Añade aquí la licencia del proyecto (por ejemplo, MIT). Si no hay licencia, incluye una nota indicando que debes añadirla.
+   dotnet run --project src/MonitorColasMQ -- [opciones]
 
-Notas
-Ajusta las instrucciones de instalación y requisitos al lenguaje y herramientas reales usadas en este repositorio. Si quieres, puedo adaptar el README al funcionamiento exacto del proyecto si me indicas el lenguaje principal y cómo se ejecuta (por ejemplo, el comando para correr el binario o script).
+## Argumentos comunes (adaptar según implementación en Program.cs)
+- --mq-host / --mq-connection-string: datos de conexión a IBM MQ
+- --mq-queue: nombre de la cola a usar
+- --concurrency: número de hilos/consumidores
+- --requests: número total de mensajes/peticiones a enviar
+- --output: ruta de salida para resultados (JSON/CSV)
+
+## Ejemplo hipotético:
+
+   dotnet run --project src/LoadTester -- --mq-host my-mq-host:1414 --mq-queue TEST.QUEUE --concurrency 50 --requests 10000 --output ./src/LoadTester/reports/result.json
+
+## Reportes y métricas
+- NBomber genera reportes con métricas como latencias (p50/p95/p99), RPS, tasa de errores y distribucción de pasos.
+- Revisa `src/LoadTester/reports` para archivos HTML/JSON/CSV generados por las pruebas.
+
+## Configuración
+- Parametriza las conexiones a IBM MQ por variables de entorno o añadiendo un archivo `appsettings.json` si lo prefieres.
+- Para TLS/SSL en IBM MQ, configura los certificados en el host donde se ejecute la prueba.
+
+## Buenas prácticas
+- No ejecutes pruebas de carga sin avisar en entornos compartidos o producción.
+- Monitoriza recursos del servidor (CPU, memoria, conexiones) durante las pruebas.
+- Aumenta la concurrencia progresivamente y repite pruebas para obtener resultados consistentes.
+
+## Desarrollo y contribuciones
+- Fork -> branch -> PR. Describe cambios y añade tests si procede.
+- Mantén actualizadas las versiones en los .csproj y añade documentación si introduces nuevos parámetros CLI.
+
+## Posibles mejoras
+- Documentar las opciones reales de la CLI extraídas de Program.cs (puedo hacerlo si quieres).
+- Añadir un workflow de CI que compile y valide el proyecto en GitHub Actions.
+- Incluir ejemplos concretos de configuración de IBM MQ (canal, usuario, TLS).
+
+## Licencia
+- Añade la licencia del proyecto (ej. MIT) o indica el permiso de uso.
+
+## Contacto
+- Mantenedor: tresvi (GitHub)
+
+---
+
+Hecho por: GitHub Copilot (asistente)
