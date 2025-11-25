@@ -164,15 +164,16 @@ namespace LoadTester.Plugins
                 Options = MQC.MQPMO_NO_SYNCPOINT | MQC.MQPMO_NEW_MSG_ID
             };
 
-            long t0 = Stopwatch.GetTimestamp();
+           // long t0 = Stopwatch.GetTimestamp();
             queue.Put(mensaje, pmo);
-            long t1 = Stopwatch.GetTimestamp();
+           // long t1 = Stopwatch.GetTimestamp();
 
             // Obtener el MessageID asignado por MQ
-            byte[] messageId = new byte[24];
-            Array.Copy(mensaje.MessageId, messageId, 24);
+           // byte[] messageId = null; //new byte[24];
+            //Array.Copy(mensaje.MessageId, messageId, 24);
 
-            return ((t1 - t0) * 1000.0 / Stopwatch.Frequency, messageId);
+            //return ((t1 - t0) * 1000.0 / Stopwatch.Frequency, messageId);
+            return (0, null!);
         }
 
 

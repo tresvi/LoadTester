@@ -14,17 +14,19 @@ internal sealed class TestManager : IDisposable
     private readonly string _mensaje;
     private readonly Hashtable _propertiesPort1414;
     private readonly Hashtable _propertiesPort1415;
+    private readonly Hashtable _propertiesPort1416;
 
     private readonly MQQueueManager?[] _queueManagers = new MQQueueManager?[4];
     private readonly MQQueue?[] _outputQueues = new MQQueue?[4];
 
-    public TestManager(string queueManagerName, string outputQueueName, string mensaje, Hashtable propertiesPort1414, Hashtable propertiesPort1415)
+    public TestManager(string queueManagerName, string outputQueueName, string mensaje, Hashtable propertiesPort1414, Hashtable propertiesPort1415, Hashtable propertiesPort1416)
     {
         _queueManagerName = queueManagerName;
         _outputQueueName = outputQueueName;
         _mensaje = mensaje;
         _propertiesPort1414 = propertiesPort1414;
         _propertiesPort1415 = propertiesPort1415;
+        _propertiesPort1416 = propertiesPort1416;
     }
 
     public void InicializarConexiones()
@@ -33,7 +35,13 @@ internal sealed class TestManager : IDisposable
         {
             for (int i = 0; i < _queueManagers.Length; i++)
             {
-                Hashtable props = i < 2 ? _propertiesPort1414 : _propertiesPort1415;
+                Hashtable props = i switch
+                {
+                    0 => _propertiesPort1414,  // Conexión 1: puerto 1414
+                    1 => _propertiesPort1415,  // Conexión 2: puerto 1415
+                    2 => _propertiesPort1416,  // Conexión 3: puerto 1416
+                    _ => _propertiesPort1414,  // Conexión 4: puerto 1414
+                };
                 _queueManagers[i] = new MQQueueManager(_queueManagerName, props);
                 _outputQueues[i] = IbmMQPlugin.OpenOutputQueue(_queueManagers[i]!, _outputQueueName, false);
                 Console.WriteLine($"Conexión {i + 1} establecida");
@@ -80,6 +88,32 @@ internal sealed class TestManager : IDisposable
 
         return messageCounter;
     }
+
+
+    public int EjecutarHilosInquire(TimeSpan duracionEnsayo, int numHilos)
+    {
+        int messageCounter = 0;
+        long tiempoLimiteTicks = (long)(duracionEnsayo.TotalSeconds * Stopwatch.Frequency);
+
+        Parallel.For(0, numHilos, hiloIndex =>
+        {
+            MQQueue queueActual = _outputQueues[hiloIndex % _outputQueues.Length]!;
+            long horaInicio = Stopwatch.GetTimestamp();
+            long horaFin = horaInicio + tiempoLimiteTicks;
+
+            while (Stopwatch.GetTimestamp() < horaFin)
+            {
+                IbmMQPlugin.EnviarMensaje(queueActual, _mensaje);
+                Interlocked.Increment(ref messageCounter);
+            }
+
+            double elapsedMs = (Stopwatch.GetTimestamp() - horaInicio) * 1000.0 / Stopwatch.Frequency;
+            Console.WriteLine($"Hilo {hiloIndex} tardó {elapsedMs:F2} ms");
+        });
+
+        return messageCounter;
+    }
+
 
     public void EnviarMensajesPrueba(int mensajesPorConexion = 1)
     {
