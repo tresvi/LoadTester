@@ -1,6 +1,10 @@
 ﻿using System.Collections;
 using System.Diagnostics;
 using IBM.WMQ;
+using StampedeLoadTester.Models.CommandLineOptions;
+using StampedeLoadTester.Services;
+using Tresvi.CommandParser;
+using Tresvi.CommandParser.Exceptions;
 
 namespace StampedeLoadTester
 {
@@ -35,6 +39,29 @@ namespace StampedeLoadTester
 
         static void Main(string[] args)
         {
+            //var testDefinition = JsonSerializer.Deserialize<TestDefinition>(File.ReadAllText("test-definition.json"));  
+            object verb = CommandLine.Parse(args, typeof(MasterVerb), typeof(SlaveVerb));
+
+            if (verb is MasterVerb coordinateVerb)
+            {
+                Console.WriteLine($"Archivo: {coordinateVerb.File}");
+                Console.WriteLine($"Slaves: {string.Join(", ", coordinateVerb.Slaves)}");
+                Console.WriteLine($"SlaveTimeout: {coordinateVerb.SlaveTimeout}");
+                Console.WriteLine($"ThreadNumber: {coordinateVerb.ThreadNumber}");
+            }
+            else if (verb is SlaveVerb slaveVerb)
+            {
+                Console.WriteLine($"Iniciando en modo esclavo, escuchando en puerto {slaveVerb.Port}...");
+                var remoteManager = new RemoteControllerService();
+                var cts = new CancellationTokenSource();
+                remoteManager.Listen(slaveVerb.Port, cts.Token);
+            }
+            else
+            {
+                Console.WriteLine("Argumento no reconocido. Se opera normalmente...");
+            }
+
+return;
 
             using TestManager manager = new("MQGD", OUTPUT_QUEUE, MENSAJE, _properties1414, _properties1415, _properties1416);
             manager.InicializarConexiones();
@@ -44,7 +71,7 @@ namespace StampedeLoadTester
 
             if (args.Length > 0)
             {
-                var remoteManager = new RemoteManager();
+                var remoteManager = new RemoteControllerService();
 
                 if (args[0] == "-s")
                 {

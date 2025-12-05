@@ -4,13 +4,13 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 
-namespace StampedeLoadTester;
+namespace StampedeLoadTester.Services;
 
 /// <summary>
 /// Clase para coordinar múltiples instancias del programa en diferentes equipos
 /// mediante comunicación UDP simple (ping/pong)
 /// </summary>
-internal sealed class RemoteManager
+internal sealed class RemoteControllerService
 {
     private const string PING_MESSAGE = "ping";
     private const string PONG_MESSAGE = "pong";

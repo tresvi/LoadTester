@@ -1,0 +1,17 @@
+{
+  "QueueManager": "MQGD",
+  "OutputQueue": "BNA.XX1.PEDIDO",
+  "InputQueue": "BNA.XX1.RESPUESTA",
+  "Mensaje": "    00000008500000020251118115559N0001   000000PC  01100500000000000000                        00307384",
+  "TiempoCargaMs": 2000,
+  "IpMqServer": "10.6.248.10",
+  "Channel": "CHANNEL1",
+  "MQProperties": [
+    {
+      "HostName": "10.6.248.10",
+      "Port": 1414,
+      "Channel": "CHANNEL1"
+     }
+  ]
+}
+
