@@ -42,12 +42,13 @@ namespace StampedeLoadTester
             //var testDefinition = JsonSerializer.Deserialize<TestDefinition>(File.ReadAllText("test-definition.json"));  
             object verb = CommandLine.Parse(args, typeof(MasterVerb), typeof(SlaveVerb));
 
-            if (verb is MasterVerb coordinateVerb)
+            if (verb is MasterVerb MasterVerb)
             {
-                Console.WriteLine($"Archivo: {coordinateVerb.File}");
-                Console.WriteLine($"Slaves: {string.Join(", ", coordinateVerb.Slaves)}");
-                Console.WriteLine($"SlaveTimeout: {coordinateVerb.SlaveTimeout}");
-                Console.WriteLine($"ThreadNumber: {coordinateVerb.ThreadNumber}");
+                
+                Console.WriteLine($"Archivo: {MasterVerb.File}");
+                Console.WriteLine($"Slaves: {string.Join(", ", MasterVerb.Slaves)}");
+                Console.WriteLine($"SlaveTimeout: {MasterVerb.SlaveTimeout}");
+                Console.WriteLine($"ThreadNumber: {MasterVerb.ThreadNumber}");
             }
             else if (verb is SlaveVerb slaveVerb)
             {
