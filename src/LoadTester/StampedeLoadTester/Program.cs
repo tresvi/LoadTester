@@ -5,6 +5,7 @@ using StampedeLoadTester.Models.CommandLineOptions;
 using StampedeLoadTester.Services;
 using Tresvi.CommandParser;
 using Tresvi.CommandParser.Exceptions;
+using System.Net;
 
 namespace StampedeLoadTester
 {
@@ -42,24 +43,17 @@ namespace StampedeLoadTester
             //var testDefinition = JsonSerializer.Deserialize<TestDefinition>(File.ReadAllText("test-definition.json"));  
             object verb = CommandLine.Parse(args, typeof(MasterVerb), typeof(SlaveVerb));
 
-            if (verb is MasterVerb MasterVerb)
+            if (verb is MasterVerb masterVerb)
             {
-                
-                Console.WriteLine($"Archivo: {MasterVerb.File}");
-                Console.WriteLine($"Slaves: {string.Join(", ", MasterVerb.Slaves)}");
-                Console.WriteLine($"SlaveTimeout: {MasterVerb.SlaveTimeout}");
-                Console.WriteLine($"ThreadNumber: {MasterVerb.ThreadNumber}");
+                RunAsMaster(masterVerb);
             }
             else if (verb is SlaveVerb slaveVerb)
             {
-                Console.WriteLine($"Iniciando en modo esclavo, escuchando en puerto {slaveVerb.Port}...");
-                var remoteManager = new RemoteControllerService();
-                var cts = new CancellationTokenSource();
-                remoteManager.Listen(slaveVerb.Port, cts.Token);
+                RunAsSlave(slaveVerb);
             }
             else
             {
-                Console.WriteLine("Argumento no reconocido. Se opera normalmente...");
+                Console.WriteLine("Verbo no reconocido. Se opera normalmente...");
             }
 
 return;
@@ -87,7 +81,7 @@ return;
                     Console.WriteLine("Iniciando cliente...");
                     //TimeSpan? responseTime = remoteManager.Ping("192.168.0.15", 8888, TimeSpan.FromSeconds(5));
                     //TimeSpan? responseTime = remoteManager.Ping("192.168.56.1", 8888, TimeSpan.FromSeconds(5));
-                    TimeSpan? responseTime = remoteManager.Ping("10.7.232.88", 8888, TimeSpan.FromSeconds(5));
+                    TimeSpan? responseTime = remoteManager.Ping(IPAddress.Parse("10.7.232.88") , 8888, TimeSpan.FromSeconds(5));
                     if (responseTime.HasValue)
                     {
                         Console.WriteLine($"Tiempo de respuesta: {responseTime.Value.TotalMilliseconds} ms");
@@ -145,5 +139,77 @@ int inquireCounter = 0;
             int messageCounter = manager.EjecutarHilosCarga(duracionEnsayo, numHilos);
             Console.WriteLine($"FIN: Msjes colocados: {messageCounter}");
         }
+
+
+        private static void RunAsMaster(MasterVerb masterVerb)
+        {
+            Console.WriteLine($"Archivo: {masterVerb.File}");
+            Console.WriteLine($"Slaves: {string.Join(", ", masterVerb.Slaves)}");
+            Console.WriteLine($"SlaveTimeout: {masterVerb.SlaveTimeout}");
+            Console.WriteLine($"ThreadNumber: {masterVerb.ThreadNumber}");
+
+            RemoteControllerService remoteController = new RemoteControllerService();
+            IReadOnlyList<IPAddress> ipSlaves;
+
+            try
+            {
+                ipSlaves = masterVerb.GetSlaves();
+                
+                if (ipSlaves.Count == 0)
+                {
+                    Console.Error.WriteLine("ERROR: No se han proporcionado IPs de los esclavos");
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Parsear IPs de los esclavos: {ex.Message}");
+                return;
+            }
+
+            Console.WriteLine("Verificando acceso a instancias en modo slave...");
+            WaitForSlavesPing(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
+
+
+            //Sincronizar relojes de los esclavos
+            /*
+            try
+            {
+                SyncSlavesClocks(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Error al sincronizar los relojes de los esclavos: {ex.Message}");
+                throw new Exception($"Error al sincronizar los relojes de los esclavos: {ex.Message}", ex);
+            }
+            */
+        }
+
+        private static void RunAsSlave(SlaveVerb slaveVerb)
+        {
+            Console.WriteLine($"Iniciando en modo esclavo, escuchando en puerto {slaveVerb.Port}...");
+            var remoteManager = new RemoteControllerService();
+            var cts = new CancellationTokenSource();
+            remoteManager.Listen(slaveVerb.Port, cts.Token);
+        }
+
+
+        private static void WaitForSlavesPing(RemoteControllerService remoteController, IReadOnlyList<IPAddress> ipSlaves, int slavePort, int slaveTimeout)
+        {   
+            foreach (IPAddress ip in ipSlaves)
+            {
+                Console.Write($"Verificando slave {ip}:{slavePort}:...");
+                try
+                {
+                    TimeSpan responseTime = remoteController.Ping(ip, slavePort, TimeSpan.FromSeconds(slaveTimeout));
+                    Console.WriteLine($": OK en {responseTime.TotalMilliseconds} ms");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($": ERROR {ex.Message}");
+                }
+            }
+        }
+
     }
 }

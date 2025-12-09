@@ -14,6 +14,7 @@ internal sealed class RemoteControllerService
 {
     private const string PING_MESSAGE = "ping";
     private const string PONG_MESSAGE = "pong";
+    private const string START_MESSAGE = "start-test";
 
     /// <summary>
     /// Envía un mensaje "ping" a la IP y puerto especificados y espera bloqueado una respuesta "pong"
@@ -23,7 +24,7 @@ internal sealed class RemoteControllerService
     /// <param name="port">Puerto del servidor remoto</param>
     /// <param name="timeout">Tiempo máximo de espera para la respuesta</param>
     /// <returns>El tiempo de respuesta en milisegundos, o null si se agotó el timeout</returns>
-    public TimeSpan? Ping(string ip, int port, TimeSpan timeout)
+    public TimeSpan Ping(IPAddress ip, int port, TimeSpan timeout)
     {
         UdpClient? client = null;
         try
@@ -31,14 +32,14 @@ internal sealed class RemoteControllerService
             client = new UdpClient();
             client.Client.ReceiveTimeout = (int)timeout.TotalMilliseconds;
 
-            IPEndPoint remoteEndPoint = new IPEndPoint(IPAddress.Parse(ip), port);
+            IPEndPoint remoteEndPoint = new IPEndPoint(ip, port);
             byte[] pingBytes = Encoding.UTF8.GetBytes(PING_MESSAGE);
 
             long startTime = Stopwatch.GetTimestamp();
 
             // Enviar ping
             client.Send(pingBytes, pingBytes.Length, remoteEndPoint);
-            Console.WriteLine($"Ping enviado a {ip}:{port}, esperando pong (bloqueado)...");
+
 
             // Receive() se bloquea aquí esperando la respuesta "pong" del servidor
             IPEndPoint? senderEndPoint = null;
@@ -51,24 +52,14 @@ internal sealed class RemoteControllerService
 
             if (response == PONG_MESSAGE)
             {
-                Console.WriteLine($"Pong recibido de {ip}:{port} en {elapsedMs:F2} ms");
                 return TimeSpan.FromMilliseconds(elapsedMs);
             }
-            else
-            {
-                Console.WriteLine($"Respuesta inesperada: {response}");
-                return null;
-            }
+
+            throw new Exception($"Respuesta inesperada: {response}");
         }
         catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)
         {
-            Console.WriteLine($"Timeout esperando respuesta de {ip}:{port}");
-            return null;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error al hacer ping a {ip}:{port}: {ex.Message}, {ex.ToString()}");
-            return null;
+            throw new Exception($"Timeout esperando respuesta de {ip}:{port}");
         }
         finally
         {
@@ -92,7 +83,7 @@ internal sealed class RemoteControllerService
             // Timeout de 1 segundo para poder verificar el CancellationToken periódicamente
             // pero el comportamiento es bloqueante esperando mensajes
             listener.Client.ReceiveTimeout = 5000;
-            Console.WriteLine($"Escuchando en puerto {port}... (bloqueado esperando pings)");
+            Console.WriteLine($"Escuchando en puerto {port}...");
 
             while (!cancellationToken.IsCancellationRequested)
             {

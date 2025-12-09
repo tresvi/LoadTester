@@ -13,7 +13,7 @@ public class MasterVerb
     public string? File { get; set; }
 
     [Option("slaves", 's', false, "Lista de IPs de los esclavos separados por coma (1.1.1.1, 2.2.2.2, 3.3.3.3)")]
-    public List<string> Slaves { get; set; } = new List<string>();
+    public string Slaves { get; set; } = "";
 
     [Option("slavePort", 'p', false, "Puerto donde escucharán los esclavos. Todos los esclavos deberán usar el mismo. Default: " + SLAVE_PORT_DEFAULT )]
     public int SlavePort { get; set; } = int.Parse(SLAVE_PORT_DEFAULT);
@@ -25,8 +25,16 @@ public class MasterVerb
     public int? ThreadNumber { get; set; } = Environment.ProcessorCount;
 
 
-    internal List<IPAddress> GetSlaves()
+    internal IReadOnlyList<IPAddress> GetSlaves()
     {
-        return Slaves.Select(slave => IPAddress.Parse(slave)).ToList();
+        try
+        {	
+            if (string.IsNullOrEmpty(Slaves)) return Array.Empty<IPAddress>();
+            return Slaves.Split(',').Select(slave => IPAddress.Parse(slave.Trim())).ToList();
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Error al parsear las IPs de los esclavos {ex.Message}");
+        }
     }
 }
