@@ -56,7 +56,7 @@ namespace StampedeLoadTester
                 Console.WriteLine("Verbo no reconocido. Se opera normalmente...");
             }
 
-return;
+//return;
 
             using TestManager manager = new("MQGD", OUTPUT_QUEUE, MENSAJE, _properties1414, _properties1415, _properties1416);
             manager.InicializarConexiones();
@@ -64,45 +64,11 @@ return;
             using MQQueue inquireQueue = manager.AbrirQueueInquire();
             int profundidad = inquireQueue.CurrentDepth;
 
-            if (args.Length > 0)
-            {
-                var remoteManager = new RemoteControllerService();
-
-                if (args[0] == "-s")
-                {
-                    // En un equipo (servidor)
-                    Console.WriteLine("Iniciando servidor...");
-                    var cts = new CancellationTokenSource();
-                    remoteManager.Listen(8888, cts.Token);
-                }
-                else if (args[0] == "-c")
-                {
-                    // En otro equipo (cliente)
-                    Console.WriteLine("Iniciando cliente...");
-                    //TimeSpan? responseTime = remoteManager.Ping("192.168.0.15", 8888, TimeSpan.FromSeconds(5));
-                    //TimeSpan? responseTime = remoteManager.Ping("192.168.56.1", 8888, TimeSpan.FromSeconds(5));
-                    TimeSpan? responseTime = remoteManager.Ping(IPAddress.Parse("10.7.232.88") , 8888, TimeSpan.FromSeconds(5));
-                    if (responseTime.HasValue)
-                    {
-                        Console.WriteLine($"Tiempo de respuesta: {responseTime.Value.TotalMilliseconds} ms");
-                    }
-                }
-                else
-                {
-                    Console.WriteLine("Argumento no reconocido. Se opera normalmente...");
-                }
-            }
 
             Console.WriteLine("Iniciando...");
 
-
-
 /*
-            using TestManager manager = new("MQGD", OUTPUT_QUEUE, MENSAJE, properties1414, properties1415, properties1416);
-            manager.InicializarConexiones();
 
-            using MQQueue inquireQueue = manager.AbrirQueueInquire();
-            int profundidad = inquireQueue.CurrentDepth;
 */
 /*
 int inquireCounter = 0;
@@ -129,15 +95,14 @@ int inquireCounter = 0;
 
 
 
+/*
             manager.EnviarMensajesPrueba();
 
-            int numHilos = 6;//Environment.ProcessorCount;
-            Console.WriteLine($"Número de hilos: {numHilos}");
-            Console.WriteLine($"Profundidad inicial: {profundidad}");
 
             TimeSpan duracionEnsayo = TimeSpan.FromMilliseconds(TIEMPO_CARGA_MS);
             int messageCounter = manager.EjecutarHilosCarga(duracionEnsayo, numHilos);
             Console.WriteLine($"FIN: Msjes colocados: {messageCounter}");
+            */
         }
 
 
@@ -154,23 +119,42 @@ int inquireCounter = 0;
             try
             {
                 ipSlaves = masterVerb.GetSlaves();
-                
-                if (ipSlaves.Count == 0)
+                if (ipSlaves.Count != 0)
                 {
-                    Console.Error.WriteLine("ERROR: No se han proporcionado IPs de los esclavos");
-                    return;
+                    Console.WriteLine("\n\n***********Verificando acceso a instancias en modo slave***********\n");
+
+                    bool allPingsOk = WaitForSlavesPing(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
+                    if (!allPingsOk) throw new Exception("No se han podido contactar a todos los esclavos");
+
+                    bool allConnectionsOk = InitializeRemoteConnections(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
+                    if (!allConnectionsOk) throw new Exception("No se han podido inicializar todaslas conexiones MQ en los esclavos");
+
+                    //bool allSlavesStartedOk = InitializeRemoteConnections(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
+                    //if (!allSlavesStartedOk) throw new Exception("No se han podido inicializar todas las conexiones MQ en los esclavos");
                 }
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"Parsear IPs de los esclavos: {ex.Message}");
+                Console.Error.WriteLine($"ERROR: {ex}");
                 return;
             }
 
-            Console.WriteLine("Verificando acceso a instancias en modo slave...");
-            WaitForSlavesPing(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
+            Console.Write("Inicializando conexiones MQ en el master...: ");
+            using TestManager manager = new("MQGD", OUTPUT_QUEUE, MENSAJE, _properties1414, _properties1415, _properties1416);
+            manager.InicializarConexiones();
+            Console.WriteLine("OK");
+
+            Console.Write("Abriendo queue inquire en el master...: ");
+            using MQQueue inquireQueue = manager.AbrirQueueInquire();
+            int profundidad = inquireQueue.CurrentDepth;
+            Console.WriteLine($"OK, profundidad: {profundidad}");
 
 
+            int numHilos = masterVerb.ThreadNumber ?? 6;//Environment.ProcessorCount;
+            Console.WriteLine($"Número de hilos: {numHilos}");
+
+            ExecuteWriteQueueTest(manager, numHilos);
+            
             //Sincronizar relojes de los esclavos
             /*
             try
@@ -194,8 +178,17 @@ int inquireCounter = 0;
         }
 
 
-        private static void WaitForSlavesPing(RemoteControllerService remoteController, IReadOnlyList<IPAddress> ipSlaves, int slavePort, int slaveTimeout)
+    /// <summary>
+    /// Recorre todas las IPs de los esclavos y espera a que respondan a un ping
+    /// </summary>
+    /// <param name="remoteController"></param>
+    /// <param name="ipSlaves"></param>
+    /// <param name="slavePort"></param>
+    /// <param name="slaveTimeout"></param>
+        private static bool WaitForSlavesPing(RemoteControllerService remoteController, IReadOnlyList<IPAddress> ipSlaves, int slavePort, int slaveTimeout)
         {   
+            bool allSlavesResponded = true;
+
             foreach (IPAddress ip in ipSlaves)
             {
                 Console.Write($"Verificando slave {ip}:{slavePort}:...");
@@ -207,9 +200,52 @@ int inquireCounter = 0;
                 catch (Exception ex)
                 {
                     Console.WriteLine($": ERROR {ex.Message}");
+                    allSlavesResponded = false;
                 }
             }
+
+            return allSlavesResponded;
         }
 
+        /// <summary>
+        /// Inicializa las conexiones MQ en todos los esclavos remotos
+        /// </summary>
+        /// <param name="remoteController">Servicio de control remoto</param>
+        /// <param name="ipSlaves">Lista de IPs de los esclavos</param>
+        /// <param name="slavePort">Puerto donde están escuchando los esclavos</param>
+        /// <param name="slaveTimeout">Timeout para la respuesta de los esclavos</param>
+        private static bool InitializeRemoteConnections(RemoteControllerService remoteController, IReadOnlyList<IPAddress> ipSlaves, int slavePort, int slaveTimeout)
+        {
+            bool allSlavesInitialized = true;
+
+            foreach (IPAddress ip in ipSlaves)
+            {
+                Console.Write($"Inicializando conexiones MQ en slave {ip}:{slavePort}:...");
+                try
+                {
+                    bool success = remoteController.SendInitConCommand(ip, slavePort, TimeSpan.FromSeconds(slaveTimeout));
+                    if (success)
+                        Console.WriteLine($": OK");
+                    else
+                        Console.WriteLine($": ERROR - El esclavo respondió con ERROR o timeout");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($": ERROR {ex.Message}");
+                    allSlavesInitialized = false;
+                }
+            }
+            return allSlavesInitialized;
+        }
+
+
+        private static void ExecuteWriteQueueTest(TestManager manager, int numHilos)
+        {
+            manager.EnviarMensajesPrueba();
+
+            TimeSpan duracionEnsayo = TimeSpan.FromMilliseconds(TIEMPO_CARGA_MS);
+            int messageCounter = manager.EjecutarHilosCarga(duracionEnsayo, numHilos);
+            Console.WriteLine($"FIN: Msjes colocados: {messageCounter}");
+        }
     }
 }
