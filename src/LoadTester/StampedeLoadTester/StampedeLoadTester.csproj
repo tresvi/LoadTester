@@ -7,10 +7,13 @@
     <Nullable>enable</Nullable>
     
     <!-- Configuración de Release con optimizaciones máximas -->
-    <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
+	<!--Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
     <Optimize>true</Optimize>
     <DebugType>none</DebugType>
-    <DebugSymbols>false</DebugSymbols>
+    <DebugSymbols>false</DebugSymbols-->
+	<Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
+    <Optimize>true</Optimize>
+    <DebugSymbols>true</DebugSymbols>
     
     <!-- Native AOT para máxima velocidad -->
     <!-- Nota: Puede tener problemas con IBM MQ si usa reflection intensivamente -->

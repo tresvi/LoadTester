@@ -14,7 +14,7 @@ namespace StampedeLoadTester
         const string OUTPUT_QUEUE = "BNA.XX1.PEDIDO";
         const string MENSAJE = "    00000008500000020251118115559N0001   000000PC  01100500000000000000                        00307384";
         const int TIEMPO_CARGA_MS = 2000;
-        const string IP_MQ_SERVER = "10.6.248.10"; //"192.168.1.37"; //"192.168.0.15";
+        const string IP_MQ_SERVER = "192.168.0.31";//"10.6.248.10"; //"192.168.1.37"; //"192.168.0.15";
         const string CHANNEL = "CHANNEL1";
         
         static readonly Hashtable _properties1414 = new()
@@ -127,7 +127,7 @@ int inquireCounter = 0;
                     if (!allPingsOk) throw new Exception("No se han podido contactar a todos los esclavos");
 
                     bool allConnectionsOk = InitializeRemoteConnections(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
-                    if (!allConnectionsOk) throw new Exception("No se han podido inicializar todaslas conexiones MQ en los esclavos");
+                    if (!allConnectionsOk) throw new Exception("No se han podido inicializar todas las conexiones MQ en los esclavos");
 
                     //bool allSlavesStartedOk = InitializeRemoteConnections(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
                     //if (!allSlavesStartedOk) throw new Exception("No se han podido inicializar todas las conexiones MQ en los esclavos");
