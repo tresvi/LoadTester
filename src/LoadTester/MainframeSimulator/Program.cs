@@ -4,6 +4,7 @@ using System.Collections;
 using Tresvi.CommandParser;
 using MainframeSimulator.Options;
 using Tresvi.CommandParser.Exceptions;
+using System.Globalization;
 
 namespace MainframeSimulator
 {
@@ -62,7 +63,7 @@ namespace MainframeSimulator
                 };
 
                 // Número de hilos para lectura (configurable, usando Environment.ProcessorCount por defecto para mejor rendimiento)
-                int numberOfThreads = Environment.ProcessorCount;
+                int numberOfThreads = 1; //Environment.ProcessorCount;
                 var tasks = new List<Task>();
 
                 // Iniciar múltiples hilos para leer de la cola de entrada
@@ -72,7 +73,7 @@ namespace MainframeSimulator
                     int threadId = i + 1;
                     tasks.Add(Task.Run(async () => await ProcessMessagesAsync(
                         queueManager,
-                        options.InputQueue,
+                        options.InputQueue!,
                         options.OutputQueue!,
                         options.Delay,
                         options.Quiet,
@@ -149,10 +150,31 @@ namespace MainframeSimulator
                         message.Seek(0);
                         string messageText = message.ReadString(message.MessageLength);
                         
+                        /*
+                        // Obtener timestamp del servidor cuando el mensaje fue puesto en la cola
+                        DateTime? messagePutTime = GetMessagePutDateTime(message);
+                        TimeSpan? timeSincePut = null;
+                        if (messagePutTime.HasValue)
+                        {
+                            // Obtener tiempo actual del servidor (aproximado usando tiempo local)
+                            // Nota: Para mayor precisión, se podría consultar el tiempo del servidor MQ
+                            timeSincePut = DateTime.Now - messagePutTime.Value;
+                            Console.WriteLine($"HAYYY TIEMPOOO");
+                        }
+                        else
+                        {
+                            Console.WriteLine("NO HAY TIEMPOOO");
+                        }*/
+
                         if (!quiet)
                         {
                             string preview = messageText.Length > 50 ? messageText.Substring(0, 50) + "..." : messageText;
-                            Console.WriteLine($"[Thread {threadId}] Received message: {preview}");
+                            /*string timeInfo = timeSincePut.HasValue 
+                                ? $" (puesto hace {FormatTimeSpan(timeSincePut.Value)})" 
+                                : "";
+                            Console.WriteLine($"[Thread {threadId}] Received message: {preview}{timeInfo}");
+                            */
+                            Console.WriteLine($"[Thread {threadId}] Received message: {preview}{message.PutDateTime.ToString("hh:mm:ss.ffff")}");
                         }
 
                         if (delayMs > 0) await Task.Delay(delayMs, cancellationToken);
@@ -165,21 +187,27 @@ namespace MainframeSimulator
                         };
                         responseMessage.WriteString(responseText);
 
-                        // Colocar mensaje en la cola de salida
                         var putMessageOptions = new MQPutMessageOptions();
                         outputQueue.Put(responseMessage, putMessageOptions);
-
+                        //Console.WriteLine($"Respuesta colocada a las {responseMessage.PutDateTime.ToString("HH:mm:ss.ff")}");
+                        
+                        // Obtener timestamp del servidor cuando el mensaje fue puesto
+                       /* DateTime? putTime = GetMessagePutDateTime(responseMessage);
+                        string putTimeInfo = putTime.HasValue 
+                            ? $" (puesto a las {putTime.Value:yyyy-MM-dd HH:mm:ss})" 
+                            : "";
+                       */
                         if (!quiet)
                         {
                             var responsePreview = responseText.Length > 50 ? responseText.Substring(0, 50) + "..." : responseText;
-                            Console.WriteLine($"[Thread {threadId}] Sent response: {responsePreview}");
+                            // Console.WriteLine($"[Thread {threadId}] Sent response: {responsePreview}{putTimeInfo}");
+                            Console.WriteLine($"[Thread {threadId}] Sent response: {responsePreview} {responseMessage.PutDateTime.ToString("HH:mm:ss.ff")}");
                         }
                     }
                     catch (MQException mqEx)
                     {
                         if (mqEx.ReasonCode == MQC.MQRC_NO_MSG_AVAILABLE)
                         {
-                            // No hay mensaje disponible, continuar esperando
                             continue;
                         }
                         else if (mqEx.ReasonCode == MQC.MQRC_CONNECTION_BROKEN || 
@@ -218,6 +246,102 @@ namespace MainframeSimulator
             }
 
             Console.WriteLine($"[Thread {threadId}] Worker thread stopped");
+        }
+
+        /// <summary>
+        /// Obtiene la fecha y hora cuando el mensaje fue puesto en la cola desde las propiedades del mensaje MQ
+        /// </summary>
+        static DateTime? GetMessagePutDateTime(MQMessage message)
+        {
+            try
+            {
+            // En IBM MQ .NET, las propiedades PutDate y PutTime están disponibles directamente
+            // después de hacer Get o Put. Usamos reflexión o propiedades directas si están disponibles.
+
+            // Intentar acceder a PutDate y PutTime usando reflexión por si no están expuestas directamente
+
+            //https://www.ibm.com/docs/es/ibm-mq/9.3.x?topic=descriptor-puttime-mqchar8-mqmd
+                
+                Console.WriteLine($"Hora {Encoding.UTF8.GetString(message.MQMD.PutTime)}");
+                Console.WriteLine($"Hora {message.PutDateTime.ToString("hh:mm:ss.ffff")}"); 
+                var messageType = message.GetType();
+                var putDateProp = messageType.GetProperty("PutDate");
+                var putTimeProp = messageType.GetProperty("PutTime");
+
+                if (putDateProp == null || putTimeProp == null)
+                {
+                    // Si no están disponibles como propiedades, intentar con campos
+                    putDateProp = messageType.GetProperty("PutDate", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    putTimeProp = messageType.GetProperty("PutTime", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                }
+
+                if (putDateProp != null && putTimeProp != null)
+                {
+                    object? putDateObj = putDateProp.GetValue(message);
+                    object? putTimeObj = putTimeProp.GetValue(message);
+
+                    if (putDateObj != null && putTimeObj != null)
+                    {
+                        int putDate = Convert.ToInt32(putDateObj);
+                        int putTime = Convert.ToInt32(putTimeObj);
+
+                        if (putDate == 0 || putTime == 0)
+                            return null;
+
+                        // Convertir formato MQ a DateTime
+                        string dateStr = putDate.ToString("00000000");
+                        string timeStr = putTime.ToString("00000000");
+
+                        // Parsear fecha: YYYYMMDD
+                        if (DateTime.TryParseExact(dateStr, "yyyyMMdd", CultureInfo.InvariantCulture, 
+                            DateTimeStyles.None, out DateTime date))
+                        {
+                            // Parsear hora: HHMMSSTH donde T es décimas de segundo
+                            if (timeStr.Length >= 6)
+                            {
+                                int hours = int.Parse(timeStr.Substring(0, 2));
+                                int minutes = int.Parse(timeStr.Substring(2, 2));
+                                int seconds = int.Parse(timeStr.Substring(4, 2));
+                                int tenths = timeStr.Length >= 8 ? int.Parse(timeStr.Substring(6, 1)) : 0;
+
+                                DateTime putDateTime = date.AddHours(hours).AddMinutes(minutes)
+                                    .AddSeconds(seconds).AddMilliseconds(tenths * 100);
+
+                                return putDateTime;
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Si hay error al parsear, retornar null
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Formatea un TimeSpan en formato legible (ej: "2h 15m 30s" o "45s")
+        /// </summary>
+        static string FormatTimeSpan(TimeSpan timeSpan)
+        {
+            if (timeSpan.TotalDays >= 1)
+            {
+                return $"{(int)timeSpan.TotalDays}d {timeSpan.Hours}h {timeSpan.Minutes}m";
+            }
+            else if (timeSpan.TotalHours >= 1)
+            {
+                return $"{timeSpan.Hours}h {timeSpan.Minutes}m {timeSpan.Seconds}s";
+            }
+            else if (timeSpan.TotalMinutes >= 1)
+            {
+                return $"{timeSpan.Minutes}m {timeSpan.Seconds}s";
+            }
+            else
+            {
+                return $"{timeSpan.Seconds}s";
+            }
         }
     }
 }
