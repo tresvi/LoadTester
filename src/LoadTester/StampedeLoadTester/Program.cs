@@ -15,37 +15,38 @@ namespace StampedeLoadTester
         const string MENSAJE = "    00000008500000020251118115559N0001   000000PC  01100500000000000000                        00307384";
         const int TIEMPO_CARGA_MS = 2000;
         const string IP_MQ_SERVER = "192.168.0.31";//"10.6.248.10"; //"192.168.1.37"; //"192.168.0.15";
-        const string CHANNEL = "CHANNEL1";
+        const string MANAGER_NAME = "MQGD";
         
-        static readonly Hashtable _properties1414 = new()
-        {
-            { MQC.HOST_NAME_PROPERTY, IP_MQ_SERVER },
-            { MQC.PORT_PROPERTY, 1414 },
-            { MQC.CHANNEL_PROPERTY, "CHANNEL1" },
-        };
+static readonly List<Hashtable> _connectionProperties = new List<Hashtable>
+{
+    new Hashtable
+    {
+        { MQC.HOST_NAME_PROPERTY, IP_MQ_SERVER },
+        { MQC.PORT_PROPERTY, 1414 },
+        { MQC.CHANNEL_PROPERTY, "CHANNEL1" },
+    },
+    new Hashtable
+    {
+        { MQC.HOST_NAME_PROPERTY, IP_MQ_SERVER },
+        { MQC.PORT_PROPERTY, 1414 },
+        { MQC.CHANNEL_PROPERTY, "CHANNEL1" },
+    },
+    new Hashtable
+    {
+        { MQC.HOST_NAME_PROPERTY, IP_MQ_SERVER },
+        { MQC.PORT_PROPERTY, 1414 },
+        { MQC.CHANNEL_PROPERTY, "CHANNEL1" },
+    }
+};
 
-        static readonly Hashtable _properties1415 = new()
-        {
-            { MQC.HOST_NAME_PROPERTY, IP_MQ_SERVER },
-            { MQC.PORT_PROPERTY, /*1415 */ 1414 },
-            { MQC.CHANNEL_PROPERTY, "CHANNEL1" },
-        };
-
-        static readonly Hashtable _properties1416 = new()
-        {
-            { MQC.HOST_NAME_PROPERTY, IP_MQ_SERVER },
-            { MQC.PORT_PROPERTY, /*1416*/ 1414 },
-            { MQC.CHANNEL_PROPERTY, "CHANNEL1" },
-        };
-
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
             //var testDefinition = JsonSerializer.Deserialize<TestDefinition>(File.ReadAllText("test-definition.json"));  
             object verb = CommandLine.Parse(args, typeof(MasterVerb), typeof(SlaveVerb));
 
             if (verb is MasterVerb masterVerb)
             {
-                RunAsMaster(masterVerb);
+                await RunAsMaster(masterVerb);
             }
             else if (verb is SlaveVerb slaveVerb)
             {
@@ -58,12 +59,11 @@ namespace StampedeLoadTester
 
 //return;
 
-            using TestManager manager = new("MQGD", OUTPUT_QUEUE, MENSAJE, _properties1414, _properties1415, _properties1416);
+            using TestManager manager = new(MANAGER_NAME, OUTPUT_QUEUE, MENSAJE, _connectionProperties);
             manager.InicializarConexiones();
 
             using MQQueue inquireQueue = manager.AbrirQueueInquire();
             int profundidad = inquireQueue.CurrentDepth;
-
 
             Console.WriteLine("Iniciando...");
 
@@ -106,7 +106,7 @@ int inquireCounter = 0;
         }
 
 
-        private static void RunAsMaster(MasterVerb masterVerb)
+        private static async Task RunAsMaster(MasterVerb masterVerb)
         {
             Console.WriteLine($"Archivo: {masterVerb.File}");
             Console.WriteLine($"Slaves: {string.Join(", ", masterVerb.Slaves)}");
@@ -129,8 +129,12 @@ int inquireCounter = 0;
                     bool allConnectionsOk = InitializeRemoteConnections(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
                     if (!allConnectionsOk) throw new Exception("No se han podido inicializar todas las conexiones MQ en los esclavos");
 
+                    ExecuteRemoteTestsAsync(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
+                    // Los tests se ejecutan en background, no esperamos su finalización
+
                     //bool allSlavesStartedOk = InitializeRemoteConnections(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
                     //if (!allSlavesStartedOk) throw new Exception("No se han podido inicializar todas las conexiones MQ en los esclavos");
+                    
                 }
             }
             catch (Exception ex)
@@ -140,7 +144,7 @@ int inquireCounter = 0;
             }
 
             Console.Write("Inicializando conexiones MQ en el master...: ");
-            using TestManager manager = new("MQGD", OUTPUT_QUEUE, MENSAJE, _properties1414, _properties1415, _properties1416);
+            using TestManager manager = new("MQGD", OUTPUT_QUEUE, MENSAJE, _connectionProperties);
             manager.InicializarConexiones();
             Console.WriteLine("OK");
 
@@ -149,11 +153,16 @@ int inquireCounter = 0;
             int profundidad = inquireQueue.CurrentDepth;
             Console.WriteLine($"OK, profundidad: {profundidad}");
 
-
             int numHilos = masterVerb.ThreadNumber ?? 6;//Environment.ProcessorCount;
             Console.WriteLine($"Número de hilos: {numHilos}");
 
+
+            
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("Ejecutando test de carga en el master...");
             ExecuteWriteQueueTest(manager, numHilos);
+            Console.ResetColor();
             
             //Sincronizar relojes de los esclavos
             /*
@@ -174,7 +183,7 @@ int inquireCounter = 0;
             Console.WriteLine($"Iniciando en modo esclavo, escuchando en puerto {slaveVerb.Port}...");
             var remoteManager = new RemoteControllerService();
             var cts = new CancellationTokenSource();
-            remoteManager.Listen(slaveVerb.Port, cts.Token);
+            remoteManager.Listen(slaveVerb.Port, cts.Token, "MQGD", OUTPUT_QUEUE, MENSAJE, _connectionProperties);
         }
 
 
@@ -236,6 +245,37 @@ int inquireCounter = 0;
                 }
             }
             return allSlavesInitialized;
+        }
+
+
+        private static void ExecuteRemoteTestsAsync(RemoteControllerService remoteController, IReadOnlyList<IPAddress> ipSlaves, 
+            int slavePort, int slaveTimeout)
+        {
+            // Iniciar todas las tareas en paralelo sin esperarlas (fire-and-forget)
+            foreach (var ip in ipSlaves)
+            {
+                // Usar _ = para indicar intencionalmente que no esperamos la tarea
+                _ = Task.Run(async () =>
+                {
+                    Console.Write($"Iniciando test en slave {ip}:{slavePort}:...");
+                    try
+                    {
+                        bool success = await remoteController.SendStartCommandAsync(
+                            ip, 
+                            slavePort, 
+                            TimeSpan.FromSeconds(slaveTimeout));
+                        
+                        if (success)
+                            Console.WriteLine($": OK");
+                        else
+                            Console.WriteLine($": ERROR - El esclavo respondió con ERROR o timeout");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($": ERROR {ex.Message}");
+                    }
+                });
+            }
         }
 
 

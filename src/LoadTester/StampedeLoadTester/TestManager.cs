@@ -12,21 +12,16 @@ internal sealed class TestManager : IDisposable
     private readonly string _queueManagerName;
     private readonly string _outputQueueName;
     private readonly string _mensaje;
-    private readonly Hashtable _propertiesPort1414;
-    private readonly Hashtable _propertiesPort1415;
-    private readonly Hashtable _propertiesPort1416;
-
+    private readonly List<Hashtable> _connectionProperties;
     private readonly MQQueueManager?[] _queueManagers = new MQQueueManager?[4];
     private readonly MQQueue?[] _outputQueues = new MQQueue?[4];
 
-    public TestManager(string queueManagerName, string outputQueueName, string mensaje, Hashtable propertiesPort1414, Hashtable propertiesPort1415, Hashtable propertiesPort1416)
+    public TestManager(string queueManagerName, string outputQueueName, string mensaje, List<Hashtable> connectionProperties)
     {
         _queueManagerName = queueManagerName;
         _outputQueueName = outputQueueName;
         _mensaje = mensaje;
-        _propertiesPort1414 = propertiesPort1414;
-        _propertiesPort1415 = propertiesPort1415;
-        _propertiesPort1416 = propertiesPort1416;
+        _connectionProperties = connectionProperties;
     }
 
     public void InicializarConexiones()
@@ -37,10 +32,10 @@ internal sealed class TestManager : IDisposable
             {
                 Hashtable props = i switch
                 {
-                    0 => _propertiesPort1414,  // Conexión 1: puerto 1414
-                    1 => _propertiesPort1415,  // Conexión 2: puerto 1415
-                    2 => _propertiesPort1416,  // Conexión 3: puerto 1416
-                    _ => _propertiesPort1414,  // Conexión 4: puerto 1414
+                    0 => _connectionProperties[0], 
+                    1 => _connectionProperties[1],  
+                    2 => _connectionProperties[2],  
+                    _ => _connectionProperties[0],  
                 };
                 _queueManagers[i] = new MQQueueManager(_queueManagerName, props);
                 _outputQueues[i] = IbmMQPlugin.OpenOutputQueue(_queueManagers[i]!, _outputQueueName, false);
