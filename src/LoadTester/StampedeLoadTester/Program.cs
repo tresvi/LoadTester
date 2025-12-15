@@ -6,6 +6,8 @@ using StampedeLoadTester.Services;
 using Tresvi.CommandParser;
 using Tresvi.CommandParser.Exceptions;
 using System.Net;
+using System.Threading;
+using LoadTester.Plugins;
 
 namespace StampedeLoadTester
 {
@@ -58,7 +60,7 @@ static readonly List<Hashtable> _connectionProperties = new List<Hashtable>
             }
 
 //return;
-
+/*
             using TestManager manager = new(MANAGER_NAME, OUTPUT_QUEUE, MENSAJE, _connectionProperties);
             manager.InicializarConexiones();
 
@@ -66,7 +68,7 @@ static readonly List<Hashtable> _connectionProperties = new List<Hashtable>
             int profundidad = inquireQueue.CurrentDepth;
 
             Console.WriteLine("Iniciando...");
-
+*/
 /*
 
 */
@@ -115,9 +117,30 @@ int inquireCounter = 0;
 
             RemoteControllerService remoteController = new RemoteControllerService();
             IReadOnlyList<IPAddress> ipSlaves;
-
+            using TestManager testManager = new("MQGD", OUTPUT_QUEUE, MENSAJE, _connectionProperties);
+            
+            CancellationTokenSource? monitorProfCts = null;
+            Task<Dictionary<int, int>>? taskMonitor = null;
+            
             try
             {
+                Console.Write("Inicializando conexiones MQ en el master...");
+                testManager.InicializarConexiones();
+                Console.WriteLine(": OK");
+
+                if (masterVerb.ClearQueue)
+                {
+                    Console.Write("Vaciando cola de salida...");
+                    float msjesEliminadosPorSegundo = testManager.VaciarCola(OUTPUT_QUEUE);
+                    Console.WriteLine($": OK ({msjesEliminadosPorSegundo:F2} msjes/s)");
+                }
+
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.Write("Realizando WarmUp en el master...");
+                testManager.EnviarMensajesPrueba();
+                Console.WriteLine(": OK");
+
+
                 ipSlaves = masterVerb.GetSlaves();
                 if (ipSlaves.Count != 0)
                 {
@@ -126,15 +149,15 @@ int inquireCounter = 0;
                     bool allPingsOk = WaitForSlavesPing(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
                     if (!allPingsOk) throw new Exception("No se han podido contactar a todos los esclavos");
 
-                    bool allConnectionsOk = InitializeRemoteConnections(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
+                    bool allConnectionsOk = InitializeSlavesConnections(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
                     if (!allConnectionsOk) throw new Exception("No se han podido inicializar todas las conexiones MQ en los esclavos");
 
-                    ExecuteRemoteTestsAsync(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
-                    // Los tests se ejecutan en background, no esperamos su finalización
+                    bool allWarmUpsOk = DoWarmUpSlaves(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
+                    if (!allWarmUpsOk) throw new Exception("No se ha podido realizar warmup en todas las conexiones MQ de los esclavos");
 
-                    //bool allSlavesStartedOk = InitializeRemoteConnections(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
-                    //if (!allSlavesStartedOk) throw new Exception("No se han podido inicializar todas las conexiones MQ en los esclavos");
-                    
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("Ejecutando Test de carga en los esclavos...");
+                    ExecuteRemoteTestsAsync(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
                 }
             }
             catch (Exception ex)
@@ -143,27 +166,35 @@ int inquireCounter = 0;
                 return;
             }
 
-            Console.Write("Inicializando conexiones MQ en el master...: ");
-            using TestManager manager = new("MQGD", OUTPUT_QUEUE, MENSAJE, _connectionProperties);
-            manager.InicializarConexiones();
-            Console.WriteLine("OK");
-
-            Console.Write("Abriendo queue inquire en el master...: ");
-            using MQQueue inquireQueue = manager.AbrirQueueInquire();
-            int profundidad = inquireQueue.CurrentDepth;
-            Console.WriteLine($"OK, profundidad: {profundidad}");
-
-            int numHilos = masterVerb.ThreadNumber ?? 6;//Environment.ProcessorCount;
-            Console.WriteLine($"Número de hilos: {numHilos}");
-
-
-            
+            Console.WriteLine("Iniciando monitoreo de profundidad de la cola...");
+            monitorProfCts = new CancellationTokenSource();    
+            taskMonitor = testManager.MonitorearProfundidadColaAsync(OUTPUT_QUEUE, monitorProfCts.Token);
 
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("Ejecutando test de carga en el master...");
-            ExecuteWriteQueueTest(manager, numHilos);
+            int numHilos = masterVerb.ThreadNumber;
+            Console.WriteLine($"Ejecutando test de carga en el master a {numHilos} hilos...");
+            int nroMensajesColocados = ExecuteWriteQueueTest(testManager, numHilos);
             Console.ResetColor();
-            
+
+            // Detener el monitoreo inmediatamente después del test (antes de obtener resultados de slaves)
+            Dictionary<int, int> profundidades = new Dictionary<int, int>();
+            if (monitorProfCts != null && taskMonitor != null)
+            {
+                monitorProfCts.Cancel();
+                profundidades = await taskMonitor;
+                Console.WriteLine($"Se realizaron {profundidades.Count} lecturas");
+                // Ejemplo de uso: convertir milisegundos a hora
+                foreach (var kvp in profundidades)
+                {
+                    TimeSpan tiempo = TimeSpan.FromMilliseconds(kvp.Key);
+                    Console.WriteLine($"Tiempo: {tiempo.TotalSeconds:F2}s - Profundidad: {kvp.Value}");
+                }
+            }
+
+            List<(int? result, string ipSlave)> resultados = await GetSlavesResultsAsync(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
+            PrintResults(resultados, nroMensajesColocados);
+
+
             //Sincronizar relojes de los esclavos
             /*
             try
@@ -223,16 +254,17 @@ int inquireCounter = 0;
         /// <param name="ipSlaves">Lista de IPs de los esclavos</param>
         /// <param name="slavePort">Puerto donde están escuchando los esclavos</param>
         /// <param name="slaveTimeout">Timeout para la respuesta de los esclavos</param>
-        private static bool InitializeRemoteConnections(RemoteControllerService remoteController, IReadOnlyList<IPAddress> ipSlaves, int slavePort, int slaveTimeout)
+        private static bool InitializeSlavesConnections(RemoteControllerService remoteController, IReadOnlyList<IPAddress> ipSlaves, int slavePort, int slaveTimeout)
         {
             bool allSlavesInitialized = true;
 
             foreach (IPAddress ip in ipSlaves)
             {
-                Console.Write($"Inicializando conexiones MQ en slave {ip}:{slavePort}:...");
+                Console.Write($"Inicializando conexiones MQ en slave {ip}:{slavePort}...");
                 try
                 {
-                    bool success = remoteController.SendInitConCommand(ip, slavePort, TimeSpan.FromSeconds(slaveTimeout));
+                    bool success = remoteController.SendInitConCommandAsync(ip, slavePort, TimeSpan.FromSeconds(slaveTimeout)).GetAwaiter().GetResult();
+
                     if (success)
                         Console.WriteLine($": OK");
                     else
@@ -247,45 +279,129 @@ int inquireCounter = 0;
             return allSlavesInitialized;
         }
 
+        /// <summary>
+        /// Ejecuta el warmup en todos los esclavos remotos
+        /// </summary>
+        /// <param name="remoteController">Servicio de control remoto</param>
+        /// <param name="ipSlaves">Lista de IPs de los esclavos</param>
+        /// <param name="slavePort">Puerto donde están escuchando los esclavos</param>
+        /// <param name="slaveTimeout">Timeout para la respuesta de los esclavos</param>
+        private static bool DoWarmUpSlaves(RemoteControllerService remoteController, IReadOnlyList<IPAddress> ipSlaves, int slavePort, int slaveTimeout)
+        {
+            bool allSlavesWarmedUp = true;
+
+            foreach (IPAddress ip in ipSlaves)
+            {
+                Console.Write($"Ejecutando warmup en slave {ip}:{slavePort}...");
+                try
+                {
+                    bool success = remoteController.SendWarmUpCommandAsync(ip, slavePort, TimeSpan.FromSeconds(slaveTimeout)).GetAwaiter().GetResult();
+
+                    if (success)
+                        Console.WriteLine($": OK");
+                    else
+                        Console.WriteLine($": ERROR - El esclavo respondió con ERROR o timeout");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($": ERROR {ex.Message}");
+                    allSlavesWarmedUp = false;
+                }
+            }
+            return allSlavesWarmedUp;
+        }
+
+
+        /// <summary>
+        /// Obtiene los resultados (mensajes colocados) de todos los esclavos en paralelo
+        /// </summary>
+        /// <param name="remoteController">Servicio de control remoto</param>
+        /// <param name="ipSlaves">Lista de IPs de los esclavos</param>
+        /// <param name="slavePort">Puerto donde están escuchando los esclavos</param>
+        /// <param name="slaveTimeout">Timeout para la respuesta de los esclavos</param>
+        /// <returns>Lista de tuplas con el resultado (int?) y la IP del esclavo (string). null si no se pudo obtener el resultado</returns>
+        private static async Task<List<(int? result, string ipSlave)>> GetSlavesResultsAsync(
+            RemoteControllerService remoteController, 
+            IReadOnlyList<IPAddress> ipSlaves,
+            int slavePort, 
+            int slaveTimeout)
+        {
+            var tasks = ipSlaves.Select(async ip =>
+            {
+                try
+                {
+                    int? result = await remoteController.SendGetLastResultCommandAsync(ip, slavePort, TimeSpan.FromSeconds(slaveTimeout));
+                    return (result, ip.ToString());
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error obteniendo resultado de {ip}:{slavePort}: {ex.Message}");
+                    return ((int?)null, ip.ToString());
+                }
+            });
+
+            var results = await Task.WhenAll(tasks);
+            return results.ToList();
+        }
 
         private static void ExecuteRemoteTestsAsync(RemoteControllerService remoteController, IReadOnlyList<IPAddress> ipSlaves, 
             int slavePort, int slaveTimeout)
         {
             // Iniciar todas las tareas en paralelo sin esperarlas (fire-and-forget)
-            foreach (var ip in ipSlaves)
+            foreach (IPAddress ip in ipSlaves)
             {
-                // Usar _ = para indicar intencionalmente que no esperamos la tarea
+                // Capturar la IP en una variable local para evitar problemas de closure
+                IPAddress slaveIp = ip;
+                
+                // Iniciar la tarea directamente sin Task.Run, ya que SendStartCommandAsync es async I/O
                 _ = Task.Run(async () =>
                 {
-                    Console.Write($"Iniciando test en slave {ip}:{slavePort}:...");
+                    Console.WriteLine($"Iniciando test en slave {slaveIp}:{slavePort}");
                     try
                     {
-                        bool success = await remoteController.SendStartCommandAsync(
-                            ip, 
-                            slavePort, 
-                            TimeSpan.FromSeconds(slaveTimeout));
+                        bool success = await remoteController.SendStartCommandAsync(slaveIp, slavePort, TimeSpan.FromSeconds(slaveTimeout));
                         
                         if (success)
-                            Console.WriteLine($": OK");
+                            Console.WriteLine($"Test en slave {slaveIp}:{slavePort} iniciado: OK");
                         else
-                            Console.WriteLine($": ERROR - El esclavo respondió con ERROR o timeout");
+                            Console.WriteLine($"Test en slave {slaveIp}:{slavePort} iniciado: ERROR");
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($": ERROR {ex.Message}");
+                        Console.WriteLine($"ERROR al iniciar Test en slave {slaveIp}:{slavePort}: {ex.Message}");
                     }
                 });
             }
         }
 
 
-        private static void ExecuteWriteQueueTest(TestManager manager, int numHilos)
+        private static int ExecuteWriteQueueTest(TestManager manager, int numHilos)
         {
-            manager.EnviarMensajesPrueba();
-
             TimeSpan duracionEnsayo = TimeSpan.FromMilliseconds(TIEMPO_CARGA_MS);
-            int messageCounter = manager.EjecutarHilosCarga(duracionEnsayo, numHilos);
-            Console.WriteLine($"FIN: Msjes colocados: {messageCounter}");
+            return manager.EjecutarWriteQueueLoadTest(duracionEnsayo, numHilos);
         }
+
+
+        private static void PrintResults(List<(int? result, string ipSlave)> slaveResults, int masterResult)
+        {
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("\n-----------------RESULTADOS-----------------");
+
+            int sumaSlaves = 0;
+            foreach (var slaveResult in slaveResults)
+            {
+                int nroMensajes = slaveResult.result ?? 0;
+                sumaSlaves += nroMensajes;
+                //Console.WriteLine($"Mensajes colocados por el esclavo {slaveResult.ipSlave}: {nroMensajes}");
+                Console.WriteLine($"Mensajes colocados por el esclavo {slaveResult.ipSlave}: ".PadRight(60) + nroMensajes);
+            }
+
+            Console.WriteLine($"Mensajes colocados por maestro: ".PadRight(60) + masterResult);
+            Console.WriteLine($"______".PadLeft(66));
+            Console.WriteLine($"Total de mensajes colocados: ".PadRight(60) + (masterResult + sumaSlaves));
+            Console.ResetColor();
+        }
+
+ 
     }
 }

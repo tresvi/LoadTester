@@ -22,7 +22,10 @@ public class MasterVerb
     public int SlaveTimeout { get; set; } = SLAVE_TIMEOUT_DEFAULT;
 
     [Option("threadNumber", 't', false, "Número de hilos para el test de carga. Si se omite, se usará el nro de Threads de la CPU")]
-    public int? ThreadNumber { get; set; } = Environment.ProcessorCount;
+    public int ThreadNumber { get; set; } = Environment.ProcessorCount;
+    
+    [Flag("clearQ", 'c', "Limpia la cola de salida antes de ejecutar el test de carga")]
+    public bool ClearQueue { get; set; } = false;
 
 
     internal IReadOnlyList<IPAddress> GetSlaves()

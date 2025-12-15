@@ -53,7 +53,7 @@ namespace MQQueueMonitor
                 {
                     int depth = IbmMQPlugin.GetDepth(queueMgr, outputQueue);
                     Console.WriteLine($"{DateTime.Now:HH:mm:ss} \t- Profundidad de cola {outputQueue}: {depth}");
-                    Thread.Sleep(1000);
+                    Thread.Sleep(10);
                 }
             }
             catch (MQException ex)

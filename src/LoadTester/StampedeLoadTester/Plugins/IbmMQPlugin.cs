@@ -1,4 +1,6 @@
 ﻿using System.Diagnostics;
+using System.Threading;
+using System.Threading.Tasks;
 using IBM.WMQ;
 
 namespace LoadTester.Plugins
@@ -282,7 +284,93 @@ namespace LoadTester.Plugins
             return q;
         }
 
+        /// <summary>
+        /// Vacía una cola realizando GETs de la manera más rápida posible usando múltiples hilos.
+        /// Retorna la cantidad de mensajes eliminados por segundo.
+        /// </summary>
+        /// <param name="qmgr">Queue Manager de IBM MQ</param>
+        /// <param name="queueName">Nombre de la cola a vaciar</param>
+        /// <param name="numHilos">Número de hilos a usar para paralelizar. Si es null, usa Environment.ProcessorCount</param>
+        /// <returns>Cantidad de mensajes eliminados por segundo (float)</returns>
+        public static float VaciarCola(MQQueueManager qmgr, string queueName, int? numHilos = null)
+        {
+            int hilos = numHilos ?? Environment.ProcessorCount;
+            int mensajesEliminados = 0;
+            long inicioTicks = Stopwatch.GetTimestamp();
 
+            // Opciones de GET optimizadas para velocidad máxima
+            var gmo = new MQGetMessageOptions
+            {
+                Options =
+                    MQC.MQGMO_NO_WAIT |          // Sin espera, falla inmediatamente si no hay mensaje
+                    MQC.MQGMO_NO_PROPERTIES |    // No traer propiedades del mensaje (más rápido)
+                    MQC.MQGMO_FAIL_IF_QUIESCING,
+                MatchOptions = MQC.MQMO_NONE      // Sin match, tomar el siguiente mensaje disponible
+            };
+
+            try
+            {
+                // Paralelizar los GETs usando múltiples hilos
+                Parallel.For(0, hilos, hiloIndex =>
+                {
+                    MQQueue? queue = null;
+                    try
+                    {
+                        // Cada hilo abre su propia conexión a la cola
+                        int openOptions = MQC.MQOO_INPUT_SHARED | MQC.MQOO_FAIL_IF_QUIESCING;
+                        queue = qmgr.AccessQueue(queueName, openOptions);
+
+                        // Reutilizar el objeto mensaje para evitar allocaciones
+                        MQMessage msg = new MQMessage();
+
+                        int mensajesHilo = 0;
+
+                        // Loop hasta que la cola esté vacía
+                        while (true)
+                        {
+                            try
+                            {
+                                // Limpiar el mensaje antes de cada GET
+                                msg.ClearMessage();
+                                msg.MessageId = MQC.MQMI_NONE;
+                                msg.CorrelationId = MQC.MQCI_NONE;
+
+                                // Intentar hacer GET
+                                queue.Get(msg, gmo);
+                                mensajesHilo++;
+                            }
+                            catch (MQException mqe) when (mqe.ReasonCode == MQC.MQRC_NO_MSG_AVAILABLE)
+                            {
+                                // No hay más mensajes, este hilo terminó
+                                break;
+                            }
+                        }
+
+                        // Sumar al contador total de forma thread-safe
+                        Interlocked.Add(ref mensajesEliminados, mensajesHilo);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error en hilo {hiloIndex} al vaciar la cola {queueName}: {ex.Message}");
+                    }
+                    finally
+                    {
+                        queue?.Close();
+                    }
+                });
+
+                long finTicks = Stopwatch.GetTimestamp();
+                double tiempoSegundos = (finTicks - inicioTicks) / (double)Stopwatch.Frequency;
+                if (tiempoSegundos == 0) tiempoSegundos = 0.000001;
+
+                return (float)(mensajesEliminados / tiempoSegundos);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error al vaciar la cola {queueName}: {ex.Message}");
+                throw;
+            }
+        }
 
     }
 }

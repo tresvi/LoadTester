@@ -19,6 +19,7 @@ namespace StampedeLoadTester.Services;
         private const string PING_MESSAGE = "ping";
         private const string PONG_MESSAGE = "pong";
         private const string START_COMMAND = "START";
+        private const string DO_WARMUP = "WARMUP";
         private const string CLOSE_COMMAND = "CLOSE";
         private const string INIT_CON_COMMAND = "INIT_CON";
         private const string GET_RESULT_COMMAND = "GET_RESULT";
@@ -27,7 +28,7 @@ namespace StampedeLoadTester.Services;
         private const string RESULT_PREFIX = "RESULT:";
 
         private TestDefinition? _testDefinition;
-        private TestManager? _testManager;
+
         private int? _lastMessageCounter = null;
 
         /// <summary>
@@ -89,6 +90,7 @@ namespace StampedeLoadTester.Services;
             client?.Dispose();
         }
     }
+
 
     /// <summary>
     /// Escucha en el puerto especificado y procesa comandos desde el master
@@ -155,18 +157,25 @@ namespace StampedeLoadTester.Services;
                         
                         // Responder ACK inmediatamente
                         byte[] ackBytes = Encoding.UTF8.GetBytes(ACK_MESSAGE);
+                        
                         listener.Send(ackBytes, ackBytes.Length, remoteEndPoint);
                         
                         /*************************************************/
-                        manager.EnviarMensajesPrueba();
-
                         TimeSpan duracionEnsayo = TimeSpan.FromMilliseconds(2000);
-                        int messageCounter = manager.EjecutarHilosCarga(duracionEnsayo, 6);
+                        int messageCounter = manager.EjecutarWriteQueueLoadTest(duracionEnsayo, 6);
                         Console.WriteLine($"FIN: Msjes colocados: {messageCounter}");
                         
                         // Guardar el messageCounter para consultas posteriores
                         _lastMessageCounter = messageCounter;
                         /*************************************************/
+                    }
+                    else if (receivedMessage == DO_WARMUP)
+                    {
+                        Console.WriteLine($"Comando DO_WARMUP recibido de {remoteEndPoint}");
+                        manager.EnviarMensajesPrueba();
+                        
+                        byte[] ackBytes = Encoding.UTF8.GetBytes(ACK_MESSAGE);
+                        listener.Send(ackBytes, ackBytes.Length, remoteEndPoint);
                     }
                     else if (receivedMessage == GET_RESULT_COMMAND)
                     {
@@ -174,13 +183,9 @@ namespace StampedeLoadTester.Services;
                         
                         string response;
                         if (_lastMessageCounter.HasValue)
-                        {
-                            response = $"{RESULT_PREFIX}{_lastMessageCounter.Value}";
-                        }
+                            response = $"{RESULT_PREFIX}|{_lastMessageCounter.Value}";
                         else
-                        {
                             response = ERROR_MESSAGE;
-                        }
                         
                         byte[] responseBytes = Encoding.UTF8.GetBytes(response);
                         listener.Send(responseBytes, responseBytes.Length, remoteEndPoint);
@@ -244,15 +249,6 @@ namespace StampedeLoadTester.Services;
         };
     }
 
-    /// <summary>
-    /// Ejecuta un ensayo de prueba (simulado)
-    /// </summary>
-    private void ExecuteTest()
-    {
-        Console.WriteLine("Ensayo en progreso");
-        Thread.Sleep(2000); // Esperar 2 segundos
-        Console.WriteLine("Ensayo finalizado");
-    }
 
     /// <summary>
     /// Envía un comando INIT_CON a un esclavo
@@ -261,22 +257,37 @@ namespace StampedeLoadTester.Services;
     /// <param name="port">Puerto del esclavo</param>
     /// <param name="timeout">Timeout para la respuesta</param>
     /// <returns>True si el comando fue aceptado (ACK), False si falló (ERROR o timeout)</returns>
-    public bool SendInitConCommand(IPAddress ip, int port, TimeSpan timeout)
+    public async Task<bool> SendInitConCommandAsync(IPAddress ip, int port, TimeSpan timeout)
     {
-        return SendCommand(ip, port, INIT_CON_COMMAND, timeout);
+        string response = await SendCommandAsync(ip, port, INIT_CON_COMMAND, timeout);
+
+        if (response == ACK_MESSAGE)
+            return true;
+        else if (response == ERROR_MESSAGE)
+            return false;
+        else
+            throw new Exception($"Respuesta inesperada del esclavo {ip}:{port}: {response}");
     }
 
     /// <summary>
-    /// Envía un comando START a un esclavo
+    /// Envía un comando WARMUP a un esclavo para que ejecute el warmup
     /// </summary>
     /// <param name="ip">Dirección IP del esclavo</param>
     /// <param name="port">Puerto del esclavo</param>
     /// <param name="timeout">Timeout para la respuesta</param>
-    /// <returns>True si el comando fue aceptado, False en caso contrario</returns>
-    public bool SendStartCommand(IPAddress ip, int port, TimeSpan timeout)
+    /// <returns>True si el comando fue aceptado (ACK), False si falló (ERROR o timeout)</returns>
+    public async Task<bool> SendWarmUpCommandAsync(IPAddress ip, int port, TimeSpan timeout)
     {
-        return SendCommand(ip, port, START_COMMAND, timeout);
+        string response = await SendCommandAsync(ip, port, DO_WARMUP, timeout);
+
+        if (response == ACK_MESSAGE)
+            return true;
+        else if (response == ERROR_MESSAGE)
+            return false;
+        else
+            throw new Exception($"Respuesta inesperada del esclavo {ip}:{port}: {response}");
     }
+
 
     /// <summary>
     /// Envía un comando START a un esclavo de forma asíncrona
@@ -287,144 +298,47 @@ namespace StampedeLoadTester.Services;
     /// <returns>True si el comando fue aceptado, False en caso contrario</returns>
     public async Task<bool> SendStartCommandAsync(IPAddress ip, int port, TimeSpan timeout)
     {
-        return await SendCommandAsync(ip, port, START_COMMAND, timeout);
+        string response = await SendCommandAsync(ip, port, START_COMMAND, timeout);
+
+        if (response == ACK_MESSAGE)
+            return true;
+        else if (response == ERROR_MESSAGE)
+            return false;
+        else
+            throw new Exception($"Respuesta inesperada del esclavo {ip}:{port}: {response}");
     }
 
+
     /// <summary>
-    /// Consulta el resultado del último ensayo (messageCounter) a un esclavo
+    /// Envía un comando START a un esclavo de forma asíncrona
     /// </summary>
     /// <param name="ip">Dirección IP del esclavo</param>
     /// <param name="port">Puerto del esclavo</param>
     /// <param name="timeout">Timeout para la respuesta</param>
-    /// <returns>El número de mensajes colocados, o null si no hay resultado disponible o hubo error</returns>
-    public async Task<int?> GetLastResultAsync(IPAddress ip, int port, TimeSpan timeout)
+    /// <returns>True si el comando fue aceptado, False en caso contrario</returns>
+    public async Task<int?> SendGetLastResultCommandAsync(IPAddress ip, int port, TimeSpan timeout)
     {
-        UdpClient? client = null;
-        try
+        string response = await SendCommandAsync(ip, port, GET_RESULT_COMMAND, timeout);
+
+        if (response.StartsWith(RESULT_PREFIX))
         {
-            client = new UdpClient();
-            client.Client.ReceiveTimeout = (int)timeout.TotalMilliseconds;
-
-            IPEndPoint remoteEndPoint = new IPEndPoint(ip, port);
-            byte[] commandBytes = Encoding.UTF8.GetBytes(GET_RESULT_COMMAND);
-
-            // Enviar comando
-            await client.SendAsync(commandBytes, commandBytes.Length, remoteEndPoint);
-
-            // Esperar respuesta con timeout
-            var receiveTask = client.ReceiveAsync();
-            var timeoutTask = Task.Delay(timeout);
+            string countStr = response.Substring(RESULT_PREFIX.Length + 1);
             
-            var completedTask = await Task.WhenAny(receiveTask, timeoutTask);
-            
-            if (completedTask == timeoutTask)
-            {
-                Console.WriteLine($"Timeout consultando resultado de {ip}:{port}");
-                return null;
-            }
-            
-            var result = await receiveTask;
-            string response = Encoding.UTF8.GetString(result.Buffer).Trim();
-
-            if (response.StartsWith(RESULT_PREFIX))
-            {
-                string countStr = response.Substring(RESULT_PREFIX.Length);
-                if (int.TryParse(countStr, out int messageCount))
-                {
-                    return messageCount;
-                }
-                else
-                {
-                    Console.WriteLine($"Formato de resultado inválido de {ip}:{port}: {response}");
-                    return null;
-                }
-            }
-            else if (response == ERROR_MESSAGE)
-            {
-                Console.WriteLine($"El esclavo {ip}:{port} respondió con ERROR - no hay resultado disponible");
-                return null;
-            }
+            if (int.TryParse(countStr, out int messageCount))
+                return messageCount;
             else
-            {
-                Console.WriteLine($"Respuesta inesperada del esclavo {ip}:{port}: {response}");
                 return null;
-            }
         }
-        catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)
+        else if (response == ERROR_MESSAGE)
         {
-            Console.WriteLine($"Timeout consultando resultado de {ip}:{port}");
             return null;
         }
-        catch (Exception ex)
+        else
         {
-            Console.WriteLine($"Error consultando resultado de {ip}:{port}: {ex.Message}");
-            return null;
-        }
-        finally
-        {
-            client?.Close();
-            client?.Dispose();
+            throw new Exception($"Respuesta inesperada del esclavo {ip}:{port}: {response}");
         }
     }
 
-
-    /// <summary>
-    /// Envía un comando genérico a un esclavo
-    /// </summary>
-    /// <param name="ip">Dirección IP del esclavo</param>
-    /// <param name="port">Puerto del esclavo</param>
-    /// <param name="command">Comando a enviar</param>
-    /// <param name="timeout">Timeout para la respuesta</param>
-    /// <returns>True si el comando fue aceptado (se recibió ACK), False en caso contrario</returns>
-    private bool SendCommand(IPAddress ip, int port, string command, TimeSpan timeout)
-    {
-        UdpClient? client = null;
-        try
-        {
-            client = new UdpClient();
-            client.Client.ReceiveTimeout = (int)timeout.TotalMilliseconds;
-
-            IPEndPoint remoteEndPoint = new IPEndPoint(ip, port);
-            byte[] commandBytes = Encoding.UTF8.GetBytes(command);
-
-            // Enviar comando
-            client.Send(commandBytes, commandBytes.Length, remoteEndPoint);
-
-            // Esperar respuesta ACK
-            IPEndPoint? senderEndPoint = null;
-            byte[] responseBytes = client.Receive(ref senderEndPoint);
-
-            string response = Encoding.UTF8.GetString(responseBytes).Trim();
-
-            if (response == ACK_MESSAGE)
-            {
-                return true;
-            }
-            else if (response == ERROR_MESSAGE)
-            {
-                Console.WriteLine($"El esclavo {ip}:{port} respondió con ERROR para el comando {command}");
-                return false;
-            }
-
-            Console.WriteLine($"Respuesta inesperada del esclavo {ip}:{port}: {response}");
-            return false;
-        }
-        catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)
-        {
-            Console.WriteLine($"Timeout enviando comando {command} a {ip}:{port}");
-            return false;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error enviando comando {command} a {ip}:{port}: {ex.Message}");
-            return false;
-        }
-        finally
-        {
-            client?.Close();
-            client?.Dispose();
-        }
-    }
 
     /// <summary>
     /// Envía un comando genérico a un esclavo de forma asíncrona
@@ -434,7 +348,7 @@ namespace StampedeLoadTester.Services;
     /// <param name="command">Comando a enviar</param>
     /// <param name="timeout">Timeout para la respuesta</param>
     /// <returns>True si el comando fue aceptado (se recibió ACK), False en caso contrario</returns>
-    private async Task<bool> SendCommandAsync(IPAddress ip, int port, string command, TimeSpan timeout)
+    private async Task<string> SendCommandAsync(IPAddress ip, int port, string command, TimeSpan timeout)
     {
         UdpClient? client = null;
         try
@@ -445,10 +359,8 @@ namespace StampedeLoadTester.Services;
             IPEndPoint remoteEndPoint = new IPEndPoint(ip, port);
             byte[] commandBytes = Encoding.UTF8.GetBytes(command);
 
-            // Enviar comando de forma asíncrona
             await client.SendAsync(commandBytes, commandBytes.Length, remoteEndPoint);
 
-            // Esperar respuesta ACK de forma asíncrona con timeout
             using (var cts = new CancellationTokenSource(timeout))
             {
                 try
@@ -458,44 +370,24 @@ namespace StampedeLoadTester.Services;
                     
                     var completedTask = await Task.WhenAny(receiveTask, timeoutTask);
                     
-                    if (completedTask == timeoutTask)
-                    {
-                        Console.WriteLine($"Timeout enviando comando {command} a {ip}:{port}");
-                        return false;
-                    }
+                    if (completedTask == timeoutTask) throw new Exception($"Timeout enviando comando {command} a {ip}:{port}");
                     
-                    var result = await receiveTask;
-                    string response = Encoding.UTF8.GetString(result.Buffer).Trim();
-
-                    if (response == ACK_MESSAGE)
-                    {
-                        return true;
-                    }
-                    else if (response == ERROR_MESSAGE)
-                    {
-                        Console.WriteLine($"El esclavo {ip}:{port} respondió con ERROR para el comando {command}");
-                        return false;
-                    }
-
-                    Console.WriteLine($"Respuesta inesperada del esclavo {ip}:{port}: {response}");
-                    return false;
+                    UdpReceiveResult result = await receiveTask;
+                    return Encoding.UTF8.GetString(result.Buffer).Trim();
                 }
                 catch (OperationCanceledException)
                 {
-                    Console.WriteLine($"Timeout enviando comando {command} a {ip}:{port}");
-                    return false;
+                    throw new Exception($"Timeout enviando comando {command} a {ip}:{port}");
                 }
             }
         }
         catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)
         {
-            Console.WriteLine($"Timeout enviando comando {command} a {ip}:{port}");
-            return false;
+            throw new Exception($"Timeout enviando comando {command} a {ip}:{port}");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error enviando comando {command} a {ip}:{port}: {ex.Message}");
-            return false;
+            throw new Exception($"Error enviando comando {command} a {ip}:{port}: {ex.Message}");
         }
         finally
         {

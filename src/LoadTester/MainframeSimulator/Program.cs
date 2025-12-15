@@ -62,8 +62,9 @@ namespace MainframeSimulator
                     Console.WriteLine("\nShutting down...");
                 };
 
-                // Número de hilos para lectura (configurable, usando Environment.ProcessorCount por defecto para mejor rendimiento)
-                int numberOfThreads = 6; //Environment.ProcessorCount;
+                // Número de hilos para lectura (aumentado para mejor throughput en I/O bound operations)
+                // Para operaciones I/O como MQ, más threads que CPUs suele dar mejor rendimiento
+                int numberOfThreads = Environment.ProcessorCount;
                 var tasks = new List<Task>();
 
                 // Iniciar múltiples hilos para leer de la cola de entrada
@@ -84,7 +85,7 @@ namespace MainframeSimulator
                 Console.WriteLine($"Started {numberOfThreads} worker threads. Press Ctrl+C to stop.");
 
                 // Esperar todas las tareas o cancelación
-                await Task.WhenAll(tasks);
+                await Task.WhenAll(tasks).ConfigureAwait(false);
 
                 // Desconectar del MQ Manager
                 queueManager.Disconnect();
@@ -142,21 +143,28 @@ namespace MainframeSimulator
                 return;
             }
 
+            // Reutilizar objetos para reducir allocations
+            var getMessageOptions = new MQGetMessageOptions
+            {
+                Options = MQC.MQGMO_WAIT | MQC.MQGMO_FAIL_IF_QUIESCING,
+                WaitInterval = 1000 // Reducido de 5s a 1s para mejor responsividad
+            };
+            var putMessageOptions = new MQPutMessageOptions();
+            
+            // Pre-allocar StringBuilder para construir respuestas
+            var responseBuilder = new StringBuilder(1024);
+            const string ECO_PREFIX = "eco ";
+
             try
             {
                 while (!cancellationToken.IsCancellationRequested)
                 {
                     try
                     {
-                        // Intentar obtener un mensaje con timeout
+                        // Reutilizar el objeto mensaje en lugar de crear uno nuevo
                         var message = new MQMessage();
-                        var getMessageOptions = new MQGetMessageOptions
-                        {
-                            Options = MQC.MQGMO_WAIT | MQC.MQGMO_FAIL_IF_QUIESCING,
-                            WaitInterval = 5000 // Timeout de 5 segundos
-                        };
-
                         inputQueue.Get(message, getMessageOptions);
+                        
                         byte[] messageId = message.MessageId;
                         message.Seek(0);
                         string messageText = message.ReadString(message.MessageLength);
@@ -164,26 +172,37 @@ namespace MainframeSimulator
                         if (!quiet)
                         {
                             string preview = messageText.Length > 50 ? messageText.Substring(0, 50) + "..." : messageText;
-                            Console.WriteLine($"[Thread {threadId}] Received message: {preview} {message.PutDateTime.ToString("hh:mm:ss.ff")}");
+                            Console.WriteLine($"[Thread {threadId}] Received message: {preview} {message.PutDateTime:HH:mm:ss.ff}");
                         }
 
-                        if (delayMs > 0) await Task.Delay(delayMs, cancellationToken);
+                        // Aplicar delay de forma síncrona si es muy pequeño para evitar overhead de async
+                        if (delayMs > 0)
+                        {
+                            if (delayMs < 50)
+                                Thread.Sleep(delayMs); // Para delays pequeños, usar Sleep síncrono
+                            else
+                                await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
+                        }
 
-                        string responseText = "eco " + messageText;
+                        // Construir respuesta de forma más eficiente
+                        responseBuilder.Clear();
+                        responseBuilder.Append(ECO_PREFIX);
+                        responseBuilder.Append(messageText);
+                        string responseText = responseBuilder.ToString();
+                        
                         var responseMessage = new MQMessage
                         {
                             MessageId = MQC.MQMI_NONE,
-                            CorrelationId = messageId // Usar el messageId entrante como CorrelationId
+                            CorrelationId = messageId
                         };
                         responseMessage.WriteString(responseText);
 
-                        var putMessageOptions = new MQPutMessageOptions();
                         outputQueue.Put(responseMessage, putMessageOptions);
  
                         if (!quiet)
                         {
-                            var responsePreview = responseText.Length > 50 ? responseText.Substring(0, 50) + "..." : responseText;
-                            Console.WriteLine($"[Thread {threadId}] Sent response: {responsePreview} {responseMessage.PutDateTime.ToString("HH:mm:ss.ff")}");
+                            string responsePreview = responseText.Length > 50 ? responseText.Substring(0, 50) + "..." : responseText;
+                            Console.WriteLine($"[Thread {threadId}] Sent response: {responsePreview} {responseMessage.PutDateTime:HH:mm:ss.ff}");
                         }
                     }
                     catch (MQException mqEx)
@@ -202,7 +221,7 @@ namespace MainframeSimulator
                         else
                         {
                             Console.WriteLine($"[Thread {threadId}] MQ Error: {mqEx.Message} (Reason: {mqEx.ReasonCode})");
-                            await Task.Delay(1000, cancellationToken);    // Continuar procesando otros mensajes
+                            await Task.Delay(1000, cancellationToken).ConfigureAwait(false);    // Continuar procesando otros mensajes
                         }
                     }
                     catch (OperationCanceledException)
@@ -212,7 +231,7 @@ namespace MainframeSimulator
                     catch (Exception ex)
                     {
                         Console.WriteLine($"[Thread {threadId}] Error processing message: {ex.Message}");
-                            await Task.Delay(1000, cancellationToken);
+                            await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
                     }
                 }
             }
