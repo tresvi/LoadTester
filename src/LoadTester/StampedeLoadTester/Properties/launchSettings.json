@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "StampedeLoadTester": {
+      "commandName": "Project",
+      "commandLineArgs": "-f \"dsdsd\""
+    }
+  }
+}

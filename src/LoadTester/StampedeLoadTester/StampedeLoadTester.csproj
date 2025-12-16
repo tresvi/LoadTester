@@ -1,0 +1,51 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    
+    <!-- Configuración de Release con optimizaciones máximas -->
+	<!--Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
+    <Optimize>true</Optimize>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols-->
+	<Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
+    <Optimize>true</Optimize>
+    <DebugSymbols>true</DebugSymbols>
+    
+    <!-- Native AOT para máxima velocidad -->
+    <!-- Nota: Puede tener problemas con IBM MQ si usa reflection intensivamente -->
+    <PublishAot>true</PublishAot>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <PublishReadyToRunComposite>true</PublishReadyToRunComposite>
+    <PublishTrimmed>true</PublishTrimmed>
+    <!-- Usar "partial" en lugar de "full" para mejor compatibilidad con bibliotecas que usan reflection -->
+    <TrimMode>partial</TrimMode>
+    
+    <!-- Optimizaciones de compilación -->
+    <TieredCompilation>false</TieredCompilation>
+    <TieredCompilationQuickJit>false</TieredCompilationQuickJit>
+    <TieredCompilationQuickJitForLoops>false</TieredCompilationQuickJitForLoops>
+    
+    <!-- Runtime optimizations -->
+    <!-- InvariantGlobalization deshabilitado porque IBM MQ requiere culturas específicas -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+    
+    <!-- Server GC para mejor rendimiento en aplicaciones de alto rendimiento -->
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="IBMMQDotnetClient" Version="9.3.5.1" />
+    <PackageReference Include="Tresvi.CommandLineParser" Version="2.0.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="TestSamples\" />
+  </ItemGroup>
+
+</Project>

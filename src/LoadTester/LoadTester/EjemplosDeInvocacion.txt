@@ -1,0 +1,7 @@
+﻿Desa:
+LoadTester 10.6.248.10  1414  CHANNEL1  MQGD  "CU1_TRX500.hcs"
+LoadTester 10.6.248.10  1414  CHANNEL1  MQGD  "CU2_TRX559.hcs"
+
+Test: 
+LoadTester 10.6.248.10  1514  CHANNEL1  MQGQ  "CU1_TRX500.hcs"
+LoadTester 10.6.248.10  1514  CHANNEL1  MQGQ  "CU2_TRX559.hcs"
