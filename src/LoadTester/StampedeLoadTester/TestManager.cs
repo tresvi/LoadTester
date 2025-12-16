@@ -12,6 +12,8 @@ namespace StampedeLoadTester;
 
 internal sealed class TestManager : IDisposable
 {
+
+    
     internal struct MensajeEnviado
     {
         public byte[] MessageId;
@@ -30,6 +32,7 @@ internal sealed class TestManager : IDisposable
         }
         */
     }
+    private MensajeEnviado[] _mensajesEnviados;
 
     private readonly string _queueManagerName;
     private readonly string _outputQueueName;
