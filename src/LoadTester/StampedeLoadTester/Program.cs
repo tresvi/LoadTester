@@ -8,12 +8,14 @@ using Tresvi.CommandParser.Exceptions;
 using System.Net;
 using System.Threading;
 using LoadTester.Plugins;
+using MathNet.Numerics.Statistics;
 
 namespace StampedeLoadTester
 {
     internal class Program
     {
         const string OUTPUT_QUEUE = "BNA.XX1.PEDIDO";
+        const string INPUT_QUEUE = "BNA.XX1.RESPUESTA";
         const string MENSAJE = "    00000008500000020251118115559N0001   000000PC  01100500000000000000                        00307384";
         const int TIEMPO_CARGA_MS = 2000;
         const string IP_MQ_SERVER = "192.168.0.31";//"10.6.248.10"; //"192.168.1.37"; //"192.168.0.15";
@@ -130,8 +132,11 @@ int inquireCounter = 0;
 
                 if (masterVerb.ClearQueue)
                 {
-                    Console.Write("Vaciando cola de salida...");
-                    float msjesEliminadosPorSegundo = testManager.VaciarCola(OUTPUT_QUEUE);
+                    float msjesEliminadosPorSegundo = 0;
+                    Console.Write("Vaciando cola de pedido y respuesta...");
+                    msjesEliminadosPorSegundo = testManager.VaciarCola(OUTPUT_QUEUE);
+                    Console.WriteLine($": OK ({msjesEliminadosPorSegundo:F2} msjes/s)");
+                    msjesEliminadosPorSegundo = testManager.VaciarCola(INPUT_QUEUE);
                     Console.WriteLine($": OK ({msjesEliminadosPorSegundo:F2} msjes/s)");
                 }
 
@@ -193,7 +198,15 @@ int inquireCounter = 0;
 
             List<(int? result, string ipSlave)> resultados = await GetSlavesResultsAsync(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
             PrintResults(resultados, nroMensajesColocados);
-
+            Console.WriteLine("Presione una tecla para continuar...");
+            //Console.ReadKey();
+            
+            Console.WriteLine($"Esperando a que la cola {OUTPUT_QUEUE} se vacíe...");
+            testManager.WaitForQueueEmptied(OUTPUT_QUEUE);
+            Console.WriteLine($"Cola {OUTPUT_QUEUE} se encuentra vacia");
+            Console.WriteLine($"Recibiendo respuestas y actualizando put date time...");
+            testManager.RecibirRespuestasYActualizarPutDateTime(testManager.MensajesEnviados, INPUT_QUEUE);
+            PrintMessagesResults2(testManager.MensajesEnviados);
 
             //Sincronizar relojes de los esclavos
             /*
@@ -402,6 +415,181 @@ int inquireCounter = 0;
             Console.ResetColor();
         }
 
+        private static void PrintMessagesResults(List<TestManager.MensajeEnviado>[]? mensajesEnviados)
+        {
+            if (mensajesEnviados == null)
+            {
+                Console.WriteLine("No hay mensajes para imprimir.");
+                return;
+            }
+
+            Console.ForegroundColor = ConsoleColor.DarkYellow;
+            Console.WriteLine("\n-----------------MENSAJES ENVIADOS-----------------");
+            int contadorMsjes = 0;
+
+            for (int hiloIndex = 0; hiloIndex < mensajesEnviados.Length; hiloIndex++)
+            {
+                var listaMensajes = mensajesEnviados[hiloIndex];
+                
+                if (listaMensajes == null || listaMensajes.Count == 0)
+                {
+                    Console.WriteLine($"Hilo {hiloIndex}: Sin mensajes");
+                    continue;
+                }
+
+                foreach (var mensaje in listaMensajes)
+                {
+                    // Convertir MessageId a string hexadecimal
+                    string messageIdHex = mensaje.MessageId != null 
+                        ? BitConverter.ToString(mensaje.MessageId).Replace("-", "") 
+                        : "N/A";
+                    
+                    // Calcular diferencia en milisegundos entre RequestPutDateTime y ResponsePutDateTime
+                    string diferenciaMs;
+                    if (mensaje.ResponsePutDateTime == default(DateTime))
+                    {
+                        diferenciaMs = "N/A";
+                    }
+                    else
+                    {
+                        double diferencia = (mensaje.ResponsePutDateTime - mensaje.RequestPutDateTime).TotalMilliseconds;
+                        diferenciaMs = $"{diferencia} ms";
+                    }
+                    
+                    Console.WriteLine($"Hilo {hiloIndex} - NroMsje {++contadorMsjes} - {mensaje.RequestPutDateTime:yyyy-MM-dd HH:mm:ss.fff} - Diferencia: {diferenciaMs} - MessageId: {messageIdHex}");
+                }
+            }
+            
+            Console.ResetColor();
+        }
+
+        private static void PrintMessagesResults2(List<TestManager.MensajeEnviado>[]? mensajesEnviados)
+        {
+            if (mensajesEnviados == null)
+            {
+                Console.WriteLine("No hay mensajes para imprimir.");
+                return;
+            }
+
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("\n================== ESTADÍSTICAS DE LATENCIA ==================");
+            
+            // Recolectar todas las diferencias válidas y encontrar tiempos primero/último
+            List<double> diferenciasMs = new List<double>();
+            int totalMensajes = 0;
+            int mensajesConRespuesta = 0;
+            int mensajesSinRespuesta = 0;
+            DateTime? primerMensaje = null;
+            DateTime? ultimoMensaje = null;
+
+            for (int hiloIndex = 0; hiloIndex < mensajesEnviados.Length; hiloIndex++)
+            {
+                var listaMensajes = mensajesEnviados[hiloIndex];
+                
+                if (listaMensajes == null || listaMensajes.Count == 0)
+                    continue;
+
+                foreach (var mensaje in listaMensajes)
+                {
+                    totalMensajes++;
+                    
+                    // Trackear primer y último mensaje para calcular throughput
+                    if (!primerMensaje.HasValue || mensaje.RequestPutDateTime < primerMensaje.Value)
+                        primerMensaje = mensaje.RequestPutDateTime;
+                    if (!ultimoMensaje.HasValue || mensaje.RequestPutDateTime > ultimoMensaje.Value)
+                        ultimoMensaje = mensaje.RequestPutDateTime;
+                    
+                    if (mensaje.ResponsePutDateTime == default(DateTime))
+                    {
+                        mensajesSinRespuesta++;
+                    }
+                    else
+                    {
+                        mensajesConRespuesta++;
+                        double diferencia = (mensaje.ResponsePutDateTime - mensaje.RequestPutDateTime).TotalMilliseconds;
+                        diferenciasMs.Add(diferencia);
+                    }
+                }
+            }
+
+            Console.WriteLine($"Total de mensajes enviados: {totalMensajes}");
+            Console.WriteLine($"Mensajes con respuesta: {mensajesConRespuesta}");
+            Console.WriteLine($"Mensajes sin respuesta: {mensajesSinRespuesta}");
+            
+            // Calcular throughput (mensajes por segundo)
+            if (primerMensaje.HasValue && ultimoMensaje.HasValue && totalMensajes > 0)
+            {
+                double tiempoTotalSegundos = (ultimoMensaje.Value - primerMensaje.Value).TotalSeconds;
+                if (tiempoTotalSegundos > 0)
+                {
+                    double throughput = totalMensajes / tiempoTotalSegundos;
+                    Console.WriteLine($"\n-------------------------- Throughput -------------------------");
+                    Console.WriteLine($"Tiempo total de envío:   {tiempoTotalSegundos:F2} s");
+                    Console.WriteLine($"Throughput:              {throughput:F2} mensajes/segundo");
+                    
+                    // Throughput de respuestas recibidas
+                    if (mensajesConRespuesta > 0)
+                    {
+                        double throughputRespuestas = mensajesConRespuesta / tiempoTotalSegundos;
+                        Console.WriteLine($"Throughput respuestas:   {throughputRespuestas:F2} respuestas/segundo");
+                    }
+                }
+            }
+
+            if (diferenciasMs.Count == 0)
+            {
+                Console.WriteLine("⚠️  No hay mensajes con respuesta para calcular estadísticas.");
+                Console.ResetColor();
+                return;
+            }
+
+            var estadisticas = new DescriptiveStatistics(diferenciasMs);
+            
+            double promedio = estadisticas.Mean;
+            double desviacionEstandar = estadisticas.StandardDeviation;
+            double minimo = estadisticas.Minimum;
+            double maximo = estadisticas.Maximum;
+            
+            // Percentiles usando MathNet.Numerics (métodos estáticos de Statistics)
+            double p25 = Statistics.Percentile(diferenciasMs, 25);
+            double p50 = Statistics.Median(diferenciasMs); // Mediana es igual P50)
+            double p75 = Statistics.Percentile(diferenciasMs, 75);
+            double p95 = Statistics.Percentile(diferenciasMs, 95);
+            double p99 = Statistics.Percentile(diferenciasMs, 99);
+
+            Console.WriteLine("\n----- Latencia (RequestPutDateTime → ResponsePutDateTime) -----");
+            Console.WriteLine($"Promedio:              {promedio:F2} ms");
+            Console.WriteLine($"Desviación estándar:   {desviacionEstandar:F2} ms");
+            Console.WriteLine($"Mínimo:                {minimo:F2} ms");
+            Console.WriteLine($"Máximo:                {maximo:F2} ms");
+
+            Console.WriteLine($"\n------------------------ Percentiles -------------------------");
+            Console.WriteLine($"P25:                   {p25:F2} ms");
+            Console.WriteLine($"P50 (Mediana):         {p50:F2} ms");
+            Console.WriteLine($"P75:                   {p75:F2} ms");
+            Console.WriteLine($"P95:                   {p95:F2} ms");
+            Console.WriteLine($"P99:                   {p99:F2} ms");
+
+            // Estadística adicional: Coeficiente de variación
+            double coeficienteVariacion = promedio > 0 ? (desviacionEstandar / promedio) * 100 : 0;
+            Console.WriteLine($"\n------------------------ Variabilidad ------------------------");
+            Console.WriteLine($"Coeficiente de variación: {coeficienteVariacion:F2}%");
+            
+            if (coeficienteVariacion < 15)
+                Console.WriteLine("  → Baja variabilidad (proceso consistente)");
+            else if (coeficienteVariacion < 35)
+                Console.WriteLine("  → Variabilidad moderada");
+            else
+                Console.WriteLine("  → Alta variabilidad (proceso inconsistente)");
+
+            // Estadística adicional: Tasa de éxito
+            double tasaExito = totalMensajes > 0 ? (mensajesConRespuesta / (double)totalMensajes) * 100 : 0;
+            Console.WriteLine($"\n----------------------- Tasa de Éxito ------------------------");
+            Console.WriteLine($"Tasa de respuestas recibidas: {tasaExito:F2}%");
+
+            Console.WriteLine("==============================================================\n");
+            Console.ResetColor();
+        }
  
     }
 }

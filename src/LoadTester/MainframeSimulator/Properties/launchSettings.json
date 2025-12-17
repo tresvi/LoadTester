@@ -2,7 +2,7 @@
   "profiles": {
     "MainframeSimulator": {
       "commandName": "Project",
-      "commandLineArgs": "-s \"192.168.0.31\" -m \"MQGD\" -p 1414 -c \"CHANNEL1\" -i \"BNA.XX1.RESPUESTA\" -o \"BNA.XX1.PEDIDO\""
+      "commandLineArgs": "-s \"192.168.0.31\" -m \"MQGD\" -p 1414 -c \"CHANNEL1\" -i \"BNA.XX1.PEDIDO\" -o \"BNA.XX1.RESPUESTA\" -q"
     }
   }
 }

@@ -41,6 +41,7 @@
 
   <ItemGroup>
     <PackageReference Include="IBMMQDotnetClient" Version="9.3.5.1" />
+    <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
     <PackageReference Include="Tresvi.CommandLineParser" Version="2.0.4" />
   </ItemGroup>
 

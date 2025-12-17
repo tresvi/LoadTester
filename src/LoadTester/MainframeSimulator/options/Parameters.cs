@@ -29,6 +29,9 @@ namespace MainframeSimulator.Options
 
         [Flag("quiet", 'q', "Modo silencioso: no imprime mensajes cuando se reciben o envían mensajes")]
         public bool Quiet { get; set; } = false;
+
+        [Option("threadNumber", 't', false, "Número de threads a ejecutar el proceso. (Opcional, si no se especifica, será el valor de Environment.ProcessorCount)")]
+        public int ThreadNumber { get; set; } = Environment.ProcessorCount;
     }
 }
 
