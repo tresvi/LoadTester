@@ -133,9 +133,11 @@ int inquireCounter = 0;
                 if (masterVerb.ClearQueue)
                 {
                     float msjesEliminadosPorSegundo = 0;
-                    Console.Write("Vaciando cola de pedido y respuesta...");
+                    Console.Write("Vaciando cola de pedido...");
                     msjesEliminadosPorSegundo = testManager.VaciarCola(OUTPUT_QUEUE);
                     Console.WriteLine($": OK ({msjesEliminadosPorSegundo:F2} msjes/s)");
+
+                    Console.Write("Vaciando cola de pedido...");
                     msjesEliminadosPorSegundo = testManager.VaciarCola(INPUT_QUEUE);
                     Console.WriteLine($": OK ({msjesEliminadosPorSegundo:F2} msjes/s)");
                 }
@@ -462,6 +464,7 @@ int inquireCounter = 0;
             
             Console.ResetColor();
         }
+
 
         private static void PrintMessagesResults2(List<TestManager.MensajeEnviado>[]? mensajesEnviados)
         {
