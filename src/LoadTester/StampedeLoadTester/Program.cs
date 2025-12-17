@@ -200,14 +200,12 @@ int inquireCounter = 0;
 
             List<(int? result, string ipSlave)> resultados = await GetSlavesResultsAsync(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
             PrintResults(resultados, nroMensajesColocados);
-            Console.WriteLine("Presione una tecla para continuar...");
-            //Console.ReadKey();
             
-            Console.WriteLine($"Esperando a que la cola {OUTPUT_QUEUE} se vacíe...");
+            Console.Write($"Esperando a que la cola {OUTPUT_QUEUE} se vacíe...");
             testManager.WaitForQueueEmptied(OUTPUT_QUEUE);
-            Console.WriteLine($"Cola {OUTPUT_QUEUE} se encuentra vacia");
+            Console.WriteLine($": OK");
             Console.WriteLine($"Recibiendo respuestas y actualizando put date time...");
-            testManager.RecibirRespuestasYActualizarPutDateTime(testManager.MensajesEnviados, INPUT_QUEUE);
+            testManager.RecibirRespuestasYActualizarPutDateTime(testManager.MensajesEnviados!, INPUT_QUEUE);
             PrintMessagesResults2(testManager.MensajesEnviados);
 
             //Sincronizar relojes de los esclavos
