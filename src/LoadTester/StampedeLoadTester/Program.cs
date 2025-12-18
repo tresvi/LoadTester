@@ -9,6 +9,7 @@ using System.Net;
 using System.Threading;
 using LoadTester.Plugins;
 using MathNet.Numerics.Statistics;
+using StampedeLoadTester.Models;
 
 namespace StampedeLoadTester
 {
@@ -21,27 +22,27 @@ namespace StampedeLoadTester
         const string IP_MQ_SERVER = "192.168.0.31";//"10.6.248.10"; //"192.168.1.37"; //"192.168.0.15";
         const string MANAGER_NAME = "MQGD";
         
-static readonly List<Hashtable> _connectionProperties = new List<Hashtable>
-{
-    new Hashtable
-    {
-        { MQC.HOST_NAME_PROPERTY, IP_MQ_SERVER },
-        { MQC.PORT_PROPERTY, 1414 },
-        { MQC.CHANNEL_PROPERTY, "CHANNEL1" },
-    },
-    new Hashtable
-    {
-        { MQC.HOST_NAME_PROPERTY, IP_MQ_SERVER },
-        { MQC.PORT_PROPERTY, 1414 },
-        { MQC.CHANNEL_PROPERTY, "CHANNEL1" },
-    },
-    new Hashtable
-    {
-        { MQC.HOST_NAME_PROPERTY, IP_MQ_SERVER },
-        { MQC.PORT_PROPERTY, 1414 },
-        { MQC.CHANNEL_PROPERTY, "CHANNEL1" },
-    }
-};
+        static readonly List<Hashtable> _connectionProperties = new List<Hashtable>
+        {
+            new Hashtable
+            {
+                { MQC.HOST_NAME_PROPERTY, IP_MQ_SERVER },
+                { MQC.PORT_PROPERTY, 1414 },
+                { MQC.CHANNEL_PROPERTY, "CHANNEL1" },
+            },
+            new Hashtable
+            {
+                { MQC.HOST_NAME_PROPERTY, IP_MQ_SERVER },
+                { MQC.PORT_PROPERTY, 1414 },
+                { MQC.CHANNEL_PROPERTY, "CHANNEL1" },
+            },
+            new Hashtable
+            {
+                { MQC.HOST_NAME_PROPERTY, IP_MQ_SERVER },
+                { MQC.PORT_PROPERTY, 1414 },
+                { MQC.CHANNEL_PROPERTY, "CHANNEL1" },
+            }
+        };
 
         static async Task Main(string[] args)
         {
@@ -116,9 +117,23 @@ int inquireCounter = 0;
             Console.WriteLine($"Slaves: {string.Join(", ", masterVerb.Slaves)}");
             Console.WriteLine($"SlaveTimeout: {masterVerb.SlaveTimeout}");
             Console.WriteLine($"ThreadNumber: {masterVerb.ThreadNumber}");
+            Console.WriteLine($"MQConnection: {masterVerb.MqConnection}");
+
+            IReadOnlyList<IPAddress> ipSlaves;
+            MqConnectionParams mqConnectionParams = new();
+
+            try
+            {
+                ipSlaves = masterVerb.GetSlaves();
+                mqConnectionParams.LoadMqConnectionParams(masterVerb.MqConnection);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"ERROR validando parametros de entrada: {ex.Message}");
+                return;
+            }
 
             RemoteControllerService remoteController = new RemoteControllerService();
-            IReadOnlyList<IPAddress> ipSlaves;
             using TestManager testManager = new("MQGD", OUTPUT_QUEUE, MENSAJE, _connectionProperties);
             
             CancellationTokenSource? monitorProfCts = null;
@@ -137,7 +152,7 @@ int inquireCounter = 0;
                     msjesEliminadosPorSegundo = testManager.VaciarCola(OUTPUT_QUEUE);
                     Console.WriteLine($": OK ({msjesEliminadosPorSegundo:F2} msjes/s)");
 
-                    Console.Write("Vaciando cola de pedido...");
+                    Console.Write("Vaciando cola de respuesta...");
                     msjesEliminadosPorSegundo = testManager.VaciarCola(INPUT_QUEUE);
                     Console.WriteLine($": OK ({msjesEliminadosPorSegundo:F2} msjes/s)");
                 }
@@ -148,7 +163,7 @@ int inquireCounter = 0;
                 Console.WriteLine(": OK");
 
 
-                ipSlaves = masterVerb.GetSlaves();
+
                 if (ipSlaves.Count != 0)
                 {
                     Console.WriteLine("\n\n***********Verificando acceso a instancias en modo slave***********\n");
@@ -201,7 +216,7 @@ int inquireCounter = 0;
             List<(int? result, string ipSlave)> resultados = await GetSlavesResultsAsync(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
             PrintResults(resultados, nroMensajesColocados);
             
-            Console.Write($"Esperando a que la cola {OUTPUT_QUEUE} se vacíe...");
+            Console.Write($"Esperando a que la cola {OUTPUT_QUEUE} procese todos los mensajes...");
             testManager.WaitForQueueEmptied(OUTPUT_QUEUE);
             Console.WriteLine($": OK");
             Console.WriteLine($"Recibiendo respuestas y actualizando put date time...");

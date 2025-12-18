@@ -27,6 +27,8 @@ public class MasterVerb
     [Flag("clearQ", 'c', "Limpia la cola de salida antes de ejecutar el test de carga")]
     public bool ClearQueue { get; set; } = false;
 
+    [Option("mqConnection", 'm', true, "Cadena que representa los parametros de conexion al servidor MQ conla siguiente estructura: MQServerIp:Port:Channel:ManagerName. Ej: 192.168.0.31:1414:CHANNEL1:MQGD ")]
+    public string MqConnection { get; set; } = "";
 
     internal IReadOnlyList<IPAddress> GetSlaves()
     {
@@ -40,4 +42,6 @@ public class MasterVerb
             throw new Exception($"Error al parsear las IPs de los esclavos {ex.Message}");
         }
     }
+
+
 }
