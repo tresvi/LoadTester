@@ -9,14 +9,18 @@ namespace StampedeLoadTester.Models
         public int MqServerPort { get; set; }
         public string MqServerChannel { get; set; } = "";
         public string MqManagerName { get; set; } = "";
+        public string OutputQueue { get; set; } = "";
+        public string InputQueue { get; set; } = "";
 
 
         /// <summary>
         /// Valida y carga la clase. El string debe tener el formato: IP:Puerto:Canal:NombreManager
         /// </summary>
-        /// <returns>Una tupla con (IP, Puerto, Canal, NombreManager) si la validación es exitosa</returns>
+        /// <param name="mqConnectionString">Cadena con formato IP:Puerto:Canal:NombreManager</param>
+        /// <param name="outputQueue">Nombre de la cola de salida</param>
+        /// <param name="inputQueue">Nombre de la cola de entrada</param>
         /// <exception cref="ArgumentException">Se lanza si el formato es incorrecto o algún parámetro es inválido</exception>
-        internal void LoadMqConnectionParams(string mqConnectionString)
+        internal void LoadMqConnectionParams(string mqConnectionString, string outputQueue, string inputQueue)
         {
             if (string.IsNullOrWhiteSpace(mqConnectionString))
                 throw new ArgumentException("El parámetro mqConnection no puede estar vacío.");
@@ -52,16 +56,24 @@ namespace StampedeLoadTester.Models
             if (string.IsNullOrWhiteSpace(managerName))
                 throw new ArgumentException("El nombre del Queue Manager no puede estar vacío.");
 
-            this.MqServerIp = ip;
-            this.MqServerPort = port;
-            this.MqServerChannel = channel;
-            this.MqManagerName = managerName;
+            if (string.IsNullOrWhiteSpace(outputQueue))
+                throw new ArgumentException("El nombre de la cola de salida (OutputQueue) no puede estar vacío.");
+
+            if (string.IsNullOrWhiteSpace(inputQueue))
+                throw new ArgumentException("El nombre de la cola de entrada (InputQueue) no puede estar vacío.");
+
+            MqServerIp = ip;
+            MqServerPort = port;
+            MqServerChannel = channel;
+            MqManagerName = managerName;
+            OutputQueue = outputQueue.Trim();
+            InputQueue = inputQueue.Trim();
         }
 
 
         public override string ToString()
         {
-            return $"MQServerIp: {MqServerIp}\nMQServerPort: {MqServerPort}\nMQChannel: {MqServerChannel}\nMQManager: {MqManagerName}";
+            return $"MQServerIp: {MqServerIp}\nMQServerPort: {MqServerPort}\nMQChannel: {MqServerChannel}\nMQManager: {MqManagerName}\nOutputQueue: {OutputQueue}\nInputQueue: {InputQueue}";
         }
     }
 }

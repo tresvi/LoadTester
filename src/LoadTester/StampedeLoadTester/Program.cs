@@ -13,36 +13,39 @@ using StampedeLoadTester.Models;
 
 namespace StampedeLoadTester
 {
+    //dotnet run -- -f "xxx" -s "192.168.0.31, 192.168.0.24" -p 8888 -c -m "192.168.0.31:1414:CHANNEL1:MQGD" -d 2 -i "BNA.XX1.RESPUESTA" -o "BNA.XX1.PEDIDO"
     internal class Program
     {
-        const string OUTPUT_QUEUE = "BNA.XX1.PEDIDO";
-        const string INPUT_QUEUE = "BNA.XX1.RESPUESTA";
         const string MENSAJE = "    00000008500000020251118115559N0001   000000PC  01100500000000000000                        00307384";
-        const int TIEMPO_CARGA_MS = 2000;
-        const string IP_MQ_SERVER = "192.168.0.31";//"10.6.248.10"; //"192.168.1.37"; //"192.168.0.15";
-        const string MANAGER_NAME = "MQGD";
-        
-        static readonly List<Hashtable> _connectionProperties = new List<Hashtable>
+
+        /// <summary>
+        /// Crea una lista de Hashtables con las propiedades de conexión MQ basadas en MqConnectionParams
+        /// Genera 3 entradas (para soportar hasta 4 hilos de conexión en TestManager)
+        /// </summary>
+        private static List<Hashtable> CreateConnectionProperties(MqConnectionParams mqParams)
         {
-            new Hashtable
+            return new List<Hashtable>
             {
-                { MQC.HOST_NAME_PROPERTY, IP_MQ_SERVER },
-                { MQC.PORT_PROPERTY, 1414 },
-                { MQC.CHANNEL_PROPERTY, "CHANNEL1" },
-            },
-            new Hashtable
-            {
-                { MQC.HOST_NAME_PROPERTY, IP_MQ_SERVER },
-                { MQC.PORT_PROPERTY, 1414 },
-                { MQC.CHANNEL_PROPERTY, "CHANNEL1" },
-            },
-            new Hashtable
-            {
-                { MQC.HOST_NAME_PROPERTY, IP_MQ_SERVER },
-                { MQC.PORT_PROPERTY, 1414 },
-                { MQC.CHANNEL_PROPERTY, "CHANNEL1" },
-            }
-        };
+                new Hashtable
+                {
+                    { MQC.HOST_NAME_PROPERTY, mqParams.MqServerIp },
+                    { MQC.PORT_PROPERTY, mqParams.MqServerPort },
+                    { MQC.CHANNEL_PROPERTY, mqParams.MqServerChannel },
+                },
+                new Hashtable
+                {
+                    { MQC.HOST_NAME_PROPERTY, mqParams.MqServerIp },
+                    { MQC.PORT_PROPERTY, mqParams.MqServerPort },
+                    { MQC.CHANNEL_PROPERTY, mqParams.MqServerChannel },
+                },
+                new Hashtable
+                {
+                    { MQC.HOST_NAME_PROPERTY, mqParams.MqServerIp },
+                    { MQC.PORT_PROPERTY, mqParams.MqServerPort },
+                    { MQC.CHANNEL_PROPERTY, mqParams.MqServerChannel },
+                }
+            };
+        }
 
         static async Task Main(string[] args)
         {
@@ -120,12 +123,12 @@ int inquireCounter = 0;
             Console.WriteLine($"MQConnection: {masterVerb.MqConnection}");
 
             IReadOnlyList<IPAddress> ipSlaves;
-            MqConnectionParams mqConnectionParams = new();
+            MqConnectionParams mqConnParams = new();
 
             try
             {
                 ipSlaves = masterVerb.GetSlaves();
-                mqConnectionParams.LoadMqConnectionParams(masterVerb.MqConnection);
+                mqConnParams.LoadMqConnectionParams(masterVerb.MqConnection, masterVerb.OutputQueue, masterVerb.InputQueue);
             }
             catch (Exception ex)
             {
@@ -134,7 +137,8 @@ int inquireCounter = 0;
             }
 
             RemoteControllerService remoteController = new RemoteControllerService();
-            using TestManager testManager = new("MQGD", OUTPUT_QUEUE, MENSAJE, _connectionProperties);
+            List<Hashtable> connectionProperties = CreateConnectionProperties(mqConnParams);
+            using TestManager testManager = new(mqConnParams.MqManagerName, mqConnParams.OutputQueue, MENSAJE, connectionProperties);
             
             CancellationTokenSource? monitorProfCts = null;
             Task<Dictionary<int, int>>? taskMonitor = null;
@@ -149,11 +153,11 @@ int inquireCounter = 0;
                 {
                     float msjesEliminadosPorSegundo = 0;
                     Console.Write("Vaciando cola de pedido...");
-                    msjesEliminadosPorSegundo = testManager.VaciarCola(OUTPUT_QUEUE);
+                    msjesEliminadosPorSegundo = testManager.VaciarCola(mqConnParams.OutputQueue);
                     Console.WriteLine($": OK ({msjesEliminadosPorSegundo:F2} msjes/s)");
 
                     Console.Write("Vaciando cola de respuesta...");
-                    msjesEliminadosPorSegundo = testManager.VaciarCola(INPUT_QUEUE);
+                    msjesEliminadosPorSegundo = testManager.VaciarCola(mqConnParams.InputQueue);
                     Console.WriteLine($": OK ({msjesEliminadosPorSegundo:F2} msjes/s)");
                 }
 
@@ -190,12 +194,12 @@ int inquireCounter = 0;
 
             Console.WriteLine("Iniciando monitoreo de profundidad de la cola...");
             monitorProfCts = new CancellationTokenSource();    
-            taskMonitor = testManager.MonitorearProfundidadColaAsync(OUTPUT_QUEUE, monitorProfCts.Token);
+            taskMonitor = testManager.MonitorearProfundidadColaAsync(mqConnParams.OutputQueue, monitorProfCts.Token);
 
             Console.ForegroundColor = ConsoleColor.Green;
             int numHilos = masterVerb.ThreadNumber;
             Console.WriteLine($"Ejecutando test de carga en el master a {numHilos} hilos...");
-            int nroMensajesColocados = ExecuteWriteQueueTest(testManager, numHilos);
+            int nroMensajesColocados = ExecuteWriteQueueTest(testManager, numHilos, masterVerb.Duration * 1000);
             Console.ResetColor();
 
             // Detener el monitoreo inmediatamente después del test (antes de obtener resultados de slaves)
@@ -216,11 +220,11 @@ int inquireCounter = 0;
             List<(int? result, string ipSlave)> resultados = await GetSlavesResultsAsync(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
             PrintResults(resultados, nroMensajesColocados);
             
-            Console.Write($"Esperando a que la cola {OUTPUT_QUEUE} procese todos los mensajes...");
-            testManager.WaitForQueueEmptied(OUTPUT_QUEUE);
+            Console.Write($"\nEsperando a que la cola {mqConnParams.OutputQueue} procese todos los mensajes...");
+            testManager.WaitForQueueEmptied(mqConnParams.OutputQueue);
             Console.WriteLine($": OK");
             Console.WriteLine($"Recibiendo respuestas y actualizando put date time...");
-            testManager.RecibirRespuestasYActualizarPutDateTime(testManager.MensajesEnviados!, INPUT_QUEUE);
+            testManager.RecibirRespuestasYActualizarPutDateTime(testManager.MensajesEnviados!, mqConnParams.InputQueue);
             PrintMessagesResults2(testManager.MensajesEnviados);
 
             //Sincronizar relojes de los esclavos
@@ -240,9 +244,22 @@ int inquireCounter = 0;
         private static void RunAsSlave(SlaveVerb slaveVerb)
         {
             Console.WriteLine($"Iniciando en modo esclavo, escuchando en puerto {slaveVerb.Port}...");
+            
+            MqConnectionParams mqConnectionParams = new();
+            try
+            {
+                mqConnectionParams.LoadMqConnectionParams(slaveVerb.MqConnection, slaveVerb.OutputQueue, slaveVerb.InputQueue);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"ERROR validando parámetros de conexión MQ: {ex.Message}");
+                return;
+            }
+            
+            List<Hashtable> connectionProperties = CreateConnectionProperties(mqConnectionParams);
             var remoteManager = new RemoteControllerService();
             var cts = new CancellationTokenSource();
-            remoteManager.Listen(slaveVerb.Port, cts.Token, "MQGD", OUTPUT_QUEUE, MENSAJE, _connectionProperties);
+            remoteManager.Listen(slaveVerb.Port, cts.Token, mqConnectionParams.MqManagerName, mqConnectionParams.OutputQueue, MENSAJE, connectionProperties);
         }
 
 
@@ -403,9 +420,9 @@ int inquireCounter = 0;
         }
 
 
-        private static int ExecuteWriteQueueTest(TestManager manager, int numHilos)
+        private static int ExecuteWriteQueueTest(TestManager manager, int numHilos, int durationMs)
         {
-            TimeSpan duracionEnsayo = TimeSpan.FromMilliseconds(TIEMPO_CARGA_MS);
+            TimeSpan duracionEnsayo = TimeSpan.FromMilliseconds(durationMs);
             return manager.EjecutarWriteQueueLoadTest(duracionEnsayo, numHilos);
         }
 

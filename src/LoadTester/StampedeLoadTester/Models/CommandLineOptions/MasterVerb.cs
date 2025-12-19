@@ -30,6 +30,15 @@ public class MasterVerb
     [Option("mqConnection", 'm', true, "Cadena que representa los parametros de conexion al servidor MQ conla siguiente estructura: MQServerIp:Port:Channel:ManagerName. Ej: 192.168.0.31:1414:CHANNEL1:MQGD ")]
     public string MqConnection { get; set; } = "";
 
+    [Option("duration", 'd', true, "Duracion de prueba en segundos.")]
+    public int Duration { get; set;}
+
+    [Option("IputQueue", 'i', true, "Cola de entrada para recibir los mensajes.")]
+    public string InputQueue { get; set;} = "";
+
+    [Option("OutputQueue", 'o', true, "Cola de salida para enviar los mensajes.")]
+    public string OutputQueue { get; set;} = "";
+
     internal IReadOnlyList<IPAddress> GetSlaves()
     {
         try
