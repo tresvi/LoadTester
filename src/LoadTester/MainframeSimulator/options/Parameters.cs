@@ -32,6 +32,10 @@ namespace MainframeSimulator.Options
 
         [Option("threadNumber", 't', false, "Número de threads a ejecutar el proceso. (Opcional, si no se especifica, será el valor de Environment.ProcessorCount)")]
         public int ThreadNumber { get; set; } = Environment.ProcessorCount;
+
+        [Option("executionMode", 'e', false, "Modo de operación: 'echo': responde un echo de la solicitud, 'flush': simplemente vacía la cola de entrada sin nada")]
+        [EnumeratedValidation(["echo", "flush"])]
+        public string ExecutionMode { get; set; } = "echo";
     }
 }
 
