@@ -11,7 +11,7 @@ namespace MQQueueMonitor
     //dotnet run -- -m "10.6.248.10:1414:CHANNEL1:MQGD" -q "BNA.CU2.PEDIDO,BNA.CU2.RESPUESTA"
     internal class Program
     {
-        private const int MIN_REFRESH_INTERVAL = 10;
+        private const int MIN_REFRESH_INTERVAL = 25;
 
         static void Main(string[] args)
         {
@@ -94,7 +94,7 @@ namespace MQQueueMonitor
                         MaxDepth = maxDepth
                     };
 
-                    // Imprimir estructura del párrafo
+                    Console.ForegroundColor = ConsoleColor.Green;
                     Console.WriteLine($"Cola {queueName} (Prof. Maxima: {maxDepth})");
                     linePositions[$"{queueName}_Profundidad"] = Console.CursorTop;
                     Console.WriteLine($"Profundidad: 0");
@@ -106,6 +106,7 @@ namespace MQQueueMonitor
                     Console.WriteLine($"Veces que saturó: 0");
                     Console.WriteLine();
                     Console.WriteLine();
+                    Console.ResetColor();
                 }
 
                 while (true)
