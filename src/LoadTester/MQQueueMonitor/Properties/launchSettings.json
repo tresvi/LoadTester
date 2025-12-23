@@ -2,7 +2,7 @@
   "profiles": {
     "MQQueueMonitor": {
       "commandName": "Project",
-      "commandLineArgs": "192.168.0.31 1414 BNA.XX1.PEDIDO CHANNEL1 MQGD"
+      "commandLineArgs": "10.6.248.10 1414 BNA.CU1.PEDIDO CHANNEL1 MQGD"
     }
   }
 }

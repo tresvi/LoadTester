@@ -16,6 +16,7 @@ namespace MainframeSimulator
     /// <summary>
     /// Ejemplo de ejecución:
     /// dotnet run -- -s "192.168.0.31" -m "MQGD" -p 1414 -c "CHANNEL1" -i "BNA.XX1.PEDIDO" -o "BNA.XX1.RESPUESTA"
+    /// dotnet run -- -s "10.6.248.10" -m "MQGD" -p 1414 -c "CHANNEL1" -i "BNA.XX1.PEDIDO" -o "BNA.XX1.RESPUESTA"
     /// agregar "-q" para modo silencioso
     /// </summary>
     internal class Program

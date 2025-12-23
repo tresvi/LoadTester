@@ -14,10 +14,12 @@ using StampedeLoadTester.Models;
 namespace StampedeLoadTester
 {
     //dotnet run -- -f "xxx" -s "192.168.0.31, 192.168.0.24" -p 8888 -c -m "192.168.0.31:1414:CHANNEL1:MQGD" -d 2 -i "BNA.XX1.RESPUESTA" -o "BNA.XX1.PEDIDO"
+    //dotnet run -- -f "xxx" -c -m "10.6.248.10:1414:CHANNEL1:MQGD" -d 2 -i "BNA.CU1.RESPUESTA" -o "BNA.CU1.PEDIDO"
+    //dotnet run -- -f "xxx" -c -m "10.6.248.10:1414:CHANNEL1:MQGD" -d 2 -i "BNA.CU2.RESPUESTA" -o "BNA.CU2.PEDIDO"
     internal class Program
     {
-        const string MENSAJE = "    00000008500000020251118115559N0001   000000PC  01100500000000000000                        00307384";
-
+        //const string MENSAJE = "    00000008500000020251118115559N0001   000000PC  01100500000000000000                        00307384";
+        const string MENSAJE = "    00000008500000020251118114435G00111  000000DGPC011005590074200180963317";
         /// <summary>
         /// Crea una lista de Hashtables con las propiedades de conexión MQ basadas en MqConnectionParams
         /// Genera 3 entradas (para soportar hasta 4 hilos de conexión en TestManager)
@@ -198,7 +200,7 @@ int inquireCounter = 0;
 
             Console.ForegroundColor = ConsoleColor.Green;
             int numHilos = masterVerb.ThreadNumber;
-            Console.WriteLine($"Ejecutando test de carga en el master a {numHilos} hilos...");
+            Console.WriteLine($"{DateTime.Now:HH:mm:ss.ff} - Ejecutando test de carga en el master a {numHilos} hilos...");
             int nroMensajesColocados = ExecuteWriteQueueTest(testManager, numHilos, masterVerb.Duration * 1000);
             Console.ResetColor();
 

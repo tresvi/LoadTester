@@ -120,6 +120,8 @@ internal sealed class TestManager : IDisposable
 
             while (Stopwatch.GetTimestamp() < horaFin)
             {
+                //Thread.Sleep(14);
+                DelayMicroseconds(10500);
                 (DateTime putDateTime, byte[] messageId) = IbmMQPlugin.EnviarMensaje(queueActual, _mensaje);
                 
                 MensajeEnviado mensajeEnviado = new MensajeEnviado(messageId, putDateTime);
@@ -133,6 +135,20 @@ internal sealed class TestManager : IDisposable
         });
 
         return messageCounter;
+    }
+
+
+    static void DelayMicroseconds(int microseconds)
+    {
+        long ticksObjetivo =
+            microseconds * (Stopwatch.Frequency / 1_000_000);
+
+        long start = Stopwatch.GetTimestamp();
+
+        while (Stopwatch.GetTimestamp() - start < ticksObjetivo)
+        {
+            // busy wait
+        }
     }
 
 
