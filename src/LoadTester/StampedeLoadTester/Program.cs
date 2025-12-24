@@ -66,53 +66,6 @@ namespace StampedeLoadTester
             {
                 Console.WriteLine("Verbo no reconocido. Se opera normalmente...");
             }
-
-//return;
-/*
-            using TestManager manager = new(MANAGER_NAME, OUTPUT_QUEUE, MENSAJE, _connectionProperties);
-            manager.InicializarConexiones();
-
-            using MQQueue inquireQueue = manager.AbrirQueueInquire();
-            int profundidad = inquireQueue.CurrentDepth;
-
-            Console.WriteLine("Iniciando...");
-*/
-/*
-
-*/
-/*
-int inquireCounter = 0;
-            long tiempoLimiteinquire = (long)(TimeSpan.FromMilliseconds(10000).TotalSeconds * Stopwatch.Frequency);
-
-            Parallel.For(0, 4, hiloIndex =>
-            {
-                long horaInicio = Stopwatch.GetTimestamp();
-                long horaFin = horaInicio + tiempoLimiteinquire;
-
-                while (Stopwatch.GetTimestamp() < horaFin)
-                {
-                    
-                    int profundidad = inquireQueue.CurrentDepth;
-                    Interlocked.Increment(ref inquireCounter);
-                }
-
-                double elapsedMs = (Stopwatch.GetTimestamp() - horaInicio) * 1000.0 / Stopwatch.Frequency;
-                Console.WriteLine($"Hilo {hiloIndex} tardó {elapsedMs:F2} ms");
-            });
-            Console.WriteLine($"Msjes inquired: {inquireCounter}");
-            return; //para probar el inquire
-*/
-
-
-
-/*
-            manager.EnviarMensajesPrueba();
-
-
-            TimeSpan duracionEnsayo = TimeSpan.FromMilliseconds(TIEMPO_CARGA_MS);
-            int messageCounter = manager.EjecutarHilosCarga(duracionEnsayo, numHilos);
-            Console.WriteLine($"FIN: Msjes colocados: {messageCounter}");
-            */
         }
 
 
@@ -138,7 +91,7 @@ int inquireCounter = 0;
                 return;
             }
 
-            RemoteControllerService remoteController = new RemoteControllerService();
+            RemoteControllerService remoteController = new();
             List<Hashtable> connectionProperties = CreateConnectionProperties(mqConnParams);
             using TestManager testManager = new(mqConnParams.MqManagerName, mqConnParams.OutputQueue, MENSAJE, connectionProperties);
             
@@ -167,8 +120,6 @@ int inquireCounter = 0;
                 Console.Write("Realizando WarmUp en el master...");
                 testManager.EnviarMensajesPrueba();
                 Console.WriteLine(": OK");
-
-
 
                 if (ipSlaves.Count != 0)
                 {
@@ -200,7 +151,7 @@ int inquireCounter = 0;
 
             Console.ForegroundColor = ConsoleColor.Green;
             int numHilos = masterVerb.ThreadNumber;
-            Console.WriteLine($"{DateTime.Now:HH:mm:ss.ff} - Ejecutando test de carga en el master a {numHilos} hilos, aguarde...");
+            Console.WriteLine($"{DateTime.Now:HH:mm:ss.ff} - Ejecutando test de carga en el master a {numHilos} hilos, aguarde {masterVerb.Duration} segundos...");
             int nroMensajesColocados = ExecuteWriteQueueTest(testManager, numHilos, masterVerb.Duration * 1000);
             Console.ResetColor();
 

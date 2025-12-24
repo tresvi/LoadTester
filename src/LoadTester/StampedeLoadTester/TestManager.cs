@@ -210,48 +210,55 @@ internal sealed class TestManager : IDisposable
     public async Task<Dictionary<int, int>> MonitorearProfundidadColaAsync(string queueName, CancellationToken cancellationToken)
     {
         Dictionary<int, int> mediciones = new Dictionary<int, int>();
-        const int intervaloMs = 25;
+        const int intervaloMs = 100;
         MQQueue? inquireQueue = null;
 
         try
         {
             if (_queueManagers[0] is null)
-            {
                 throw new InvalidOperationException("Las conexiones no están inicializadas");
-            }
+
             inquireQueue = this.AbrirQueueInquire();
 
-            long tiempoInicio = Stopwatch.GetTimestamp();
-            long frecuencia = Stopwatch.Frequency;
+            long tiempoUltimaMedicion = 0;
+            Stopwatch swEnsayo = new();
+            Stopwatch swMedicion = new();
+            swEnsayo.Start();
 
             while (!cancellationToken.IsCancellationRequested)
             {
                 try
                 {
+                    tiempoUltimaMedicion = swEnsayo.ElapsedMilliseconds;
+
+                    swMedicion.Restart();
                     int profundidad = inquireQueue.CurrentDepth;
-                    
-                    // Calcular milisegundos transcurridos desde el inicio
-                    long tiempoActual = Stopwatch.GetTimestamp();
-                    long ticksTranscurridos = tiempoActual - tiempoInicio;
-                    // Calcular con double primero para mayor precisión, luego convertir a int
-                    double milisegundosTranscurridosD = (ticksTranscurridos * 1000.0) / frecuencia;
-                    int milisegundosTranscurridos = (int)milisegundosTranscurridosD;
-                    
-                    mediciones[milisegundosTranscurridos] = profundidad;
+                    long tiempoEspera = swMedicion.ElapsedMilliseconds;
+
+                    mediciones[(int)swEnsayo.ElapsedMilliseconds] = profundidad;
 
                     // Para delays pequeños (< 15ms), Thread.Sleep es más preciso que Task.Delay en Windows
                     // Usamos Task.Run para mantener la asincronía mientras usamos Thread.Sleep
-                    await Task.Run(() =>
-                    {
-                        // Verificar cancelación periódicamente durante el sleep
-                        int tiempoRestante = intervaloMs;
-                        while (tiempoRestante > 0 && !cancellationToken.IsCancellationRequested)
-                        {
-                            int sleepTime = Math.Min(tiempoRestante, 5); // Sleep en chunks de 5ms para poder cancelar
-                            Thread.Sleep(sleepTime);
-                            tiempoRestante -= sleepTime;
-                        }
-                    }, cancellationToken);
+                     await Task.Run(() =>
+                     {
+                         long tiempoRestante = intervaloMs - tiempoEspera;
+                         tiempoRestante = tiempoRestante < 0 ? 0 : tiempoRestante;
+                         Console.WriteLine($"Tiemporestante {tiempoRestante}");
+                         while (!cancellationToken.IsCancellationRequested)
+                         {
+                             if (swEnsayo.ElapsedMilliseconds >= tiempoUltimaMedicion + tiempoRestante) break;
+                             Thread.Sleep((int)Math.Min(tiempoRestante, 5));
+                         }
+                         /* // Verificar cancelación periódicamente durante el sleep
+                          int tiempoRestante = intervaloMs;
+                          while (tiempoRestante > 0 && !cancellationToken.IsCancellationRequested)
+                          {
+                              int sleepTime = Math.Min(tiempoRestante, 5); // Sleep en chunks de 5ms para poder cancelar
+                              Thread.Sleep(sleepTime);
+                              tiempoRestante -= sleepTime;
+                          }*/
+                     }, cancellationToken);
+                     
                 }
                 catch (OperationCanceledException)
                 {
