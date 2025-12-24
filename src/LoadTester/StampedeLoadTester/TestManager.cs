@@ -112,7 +112,7 @@ internal sealed class TestManager : IDisposable
             while (Stopwatch.GetTimestamp() < horaFin)
             {
                 //Thread.Sleep(14);
-                DelayMicroseconds(14500);
+                //DelayMicroseconds(12500);
                 (DateTime putDateTime, byte[] messageId) = IbmMQPlugin.EnviarMensaje(queueActual, _mensaje);
                 
                 MensajeEnviado mensajeEnviado = new(messageId, putDateTime);
@@ -242,7 +242,8 @@ internal sealed class TestManager : IDisposable
                      await Task.Run(() =>
                      {
                          long tiempoRestante = intervaloMs - tiempoEspera;
-                         tiempoRestante = tiempoRestante < 0 ? 0 : tiempoRestante;
+                         //TODO: achicar este algoritmo.
+                         //tiempoRestante = tiempoRestante < 0 ? 0 : tiempoRestante;
                          Console.WriteLine($"Tiemporestante {tiempoRestante}");
                          while (!cancellationToken.IsCancellationRequested)
                          {
@@ -383,7 +384,8 @@ internal sealed class TestManager : IDisposable
                 // Verificar timeout si está configurado
                 if (timeoutMs.HasValue && sw.ElapsedMilliseconds >= timeoutMs.Value)
                     return false;
-
+//TODO: aca puedo obtener el maximo sostenible. Si tengo mas de 2 mediciones (debo descartar las puntas), puedo calcular la velocidad de througput máximo
+//Promedio y saco desvio estandar.
                 Thread.Sleep(pollingIntervalMs);
             }
             catch (MQException mqe) when (mqe.ReasonCode == 2017) // MQRC_HANDLE_NOT_AVAILABLE
