@@ -200,12 +200,12 @@ int inquireCounter = 0;
 
             Console.ForegroundColor = ConsoleColor.Green;
             int numHilos = masterVerb.ThreadNumber;
-            Console.WriteLine($"{DateTime.Now:HH:mm:ss.ff} - Ejecutando test de carga en el master a {numHilos} hilos...");
+            Console.WriteLine($"{DateTime.Now:HH:mm:ss.ff} - Ejecutando test de carga en el master a {numHilos} hilos, aguarde...");
             int nroMensajesColocados = ExecuteWriteQueueTest(testManager, numHilos, masterVerb.Duration * 1000);
             Console.ResetColor();
 
             // Detener el monitoreo inmediatamente después del test (antes de obtener resultados de slaves)
-            Dictionary<int, int> profundidades = new Dictionary<int, int>();
+            Dictionary<int, int> profundidades = [];
             if (monitorProfCts != null && taskMonitor != null)
             {
                 monitorProfCts.Cancel();

@@ -284,15 +284,31 @@ namespace LoadTester.Plugins
 
         public static int GetDepth(MQQueueManager queueMgr, string queueName)
         {
-            MQQueue queue = OpenOutputQueue(queueMgr, queueName, true);
-            return queue.CurrentDepth;
+            MQQueue? queue = null;
+            try
+            {
+                queue = OpenOutputQueue(queueMgr, queueName, true);
+                return queue.CurrentDepth;
+            }
+            finally
+            {
+                queue?.Close();
+            }
         }
 
 
         public static int GetMaxDepth(MQQueueManager queueMgr, string queueName)
         {
-            MQQueue queue = OpenOutputQueue(queueMgr, queueName, true);
-            return queue.MaximumDepth;
+            MQQueue? queue = null;
+            try
+            {
+                queue = OpenOutputQueue(queueMgr, queueName, true);
+                return queue.MaximumDepth;
+            }
+            finally
+            {
+                queue?.Close();
+            }
         }
 
 

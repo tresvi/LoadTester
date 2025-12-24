@@ -8,8 +8,6 @@ using LoadTester.Plugins;
 namespace StampedeLoadTester;
 
 
-
-
 internal sealed class TestManager : IDisposable
 {
 
@@ -23,15 +21,8 @@ internal sealed class TestManager : IDisposable
         public MensajeEnviado(byte[] messageId, DateTime requestPutDateTime)
         {
             MessageId = messageId;
-            /*
-            MessageId = new byte[24];
-            if (messageId != null && messageId.Length >= 24)
-            {
-                Array.Copy(messageId, MessageId, 24);
-            }
-            */
             RequestPutDateTime = requestPutDateTime;
-            ResponsePutDateTime = default(DateTime); // Vacío por ahora
+            ResponsePutDateTime = default; // Vacío por ahora
         }
         
     }
@@ -121,10 +112,10 @@ internal sealed class TestManager : IDisposable
             while (Stopwatch.GetTimestamp() < horaFin)
             {
                 //Thread.Sleep(14);
-                DelayMicroseconds(10500);
+                DelayMicroseconds(14500);
                 (DateTime putDateTime, byte[] messageId) = IbmMQPlugin.EnviarMensaje(queueActual, _mensaje);
                 
-                MensajeEnviado mensajeEnviado = new MensajeEnviado(messageId, putDateTime);
+                MensajeEnviado mensajeEnviado = new(messageId, putDateTime);
                 MensajesEnviados[hiloIndex].Add(mensajeEnviado);
                 
                 Interlocked.Increment(ref messageCounter);
@@ -192,7 +183,7 @@ internal sealed class TestManager : IDisposable
 
     public void CerrarConexiones()
     {
-        int conexionesCerradasOK = 0, conexionesCerradasFail = 0;
+        int conexionesCerradasOK = 0;
 
         for (int i = 0; i < _queueManagers.Length; i++)
         {
@@ -204,8 +195,7 @@ internal sealed class TestManager : IDisposable
             }
             catch (Exception ex)
             {
-                conexionesCerradasFail++;
-                Console.WriteLine($"Error al cerrar conexión {i + 1}: {ex.Message}");
+                Console.WriteLine($"Error al cerrar conexión {i}: {ex.Message}");
             }
         }
         Console.WriteLine($"Conexiones cerradas OK: {conexionesCerradasOK} de {_queueManagers.Length}");
@@ -304,15 +294,8 @@ internal sealed class TestManager : IDisposable
     /// <param name="inputQueueName">Nombre de la cola de entrada de donde se recibirán los mensajes</param>
     public void RecibirRespuestasYActualizarPutDateTime(List<MensajeEnviado>[] mensajesEnviados, string inputQueueName)
     {
-        if (mensajesEnviados == null)
-        {
-            throw new ArgumentNullException(nameof(mensajesEnviados));
-        }
-
-        if (_queueManagers[0] is null)
-        {
-            throw new InvalidOperationException("Las conexiones no están inicializadas");
-        }
+        ArgumentNullException.ThrowIfNull(mensajesEnviados, nameof(mensajesEnviados));
+        if (_queueManagers[0] is null) throw new InvalidOperationException("Las conexiones no están inicializadas");
 
         // Abrir cola de entrada una vez para todos los hilos
         MQQueue? inputQueue = null;
@@ -327,7 +310,6 @@ internal sealed class TestManager : IDisposable
                 
                 if (listaMensajes == null || listaMensajes.Count == 0) continue;
 
-                // Recorrer elemento por elemento de la lista
                 for (int i = 0; i < listaMensajes.Count; i++)
                 {
                     var mensajeEnviado = listaMensajes[i];
@@ -344,14 +326,11 @@ internal sealed class TestManager : IDisposable
                         // Hacer GET usando el MessageId como CorrelationId
                         DateTime putDateTime = IbmMQPlugin.RecibirMensajeYObtenerPutDateTime(inputQueue, mensajeEnviado.MessageId);
                         mensajeEnviado.ResponsePutDateTime = putDateTime;
-                        
-                        // Actualizar el elemento en la lista (necesario porque es una struct)
                         listaMensajes[i] = mensajeEnviado;
                     }
                     catch (Exception ex)
                     {
                         Console.WriteLine($"Error al recibir mensaje para Hilo {hiloIndex}, mensaje {i}: {ex.Message}");
-                        // Continuar con el siguiente mensaje
                     }
                 }
             }
@@ -384,23 +363,35 @@ internal sealed class TestManager : IDisposable
         {
             try
             {
-                int depth = IbmMQPlugin.GetDepth(_queueManagers[0]!, queueName);
-                
-                if (depth == 0)
+                // Verificar que el queue manager aún esté conectado
+                var queueMgr = _queueManagers[0];
+                if (queueMgr == null || !queueMgr.IsConnected)
                 {
-                    return true;
+                    throw new InvalidOperationException("El queue manager no está conectado");
                 }
+
+                int depth = IbmMQPlugin.GetDepth(queueMgr, queueName);
+                if (depth == 0) return true;
 
                 // Verificar timeout si está configurado
                 if (timeoutMs.HasValue && sw.ElapsedMilliseconds >= timeoutMs.Value)
-                {
                     return false;
-                }
 
                 Thread.Sleep(pollingIntervalMs);
             }
+            catch (MQException mqe) when (mqe.ReasonCode == 2017) // MQRC_HANDLE_NOT_AVAILABLE
+            {
+                Console.WriteLine($"\nError: El handle del queue manager ya no está disponible (Reason: {mqe.ReasonCode}). La conexión puede haberse perdido.");
+                throw new InvalidOperationException($"No se puede consultar la profundidad de la cola {queueName}: el queue manager se desconectó", mqe);
+            }
             catch (Exception ex)
             {
+                // Si el error contiene información sobre handle inválido, relanzar con más contexto
+                if (ex.Message.Contains("HANDLE_NOT_AVAILABLE") || ex.Message.Contains("HOBJ") || ex.Message.Contains("2017"))
+                {
+                    Console.WriteLine($"\nError: El handle del queue manager ya no está disponible. La conexión puede haberse perdido.");
+                    throw new InvalidOperationException($"No se puede consultar la profundidad de la cola {queueName}: el queue manager se desconectó", ex);
+                }
                 Console.WriteLine($"Error al consultar profundidad de la cola {queueName}: {ex.Message}");
                 throw;
             }
