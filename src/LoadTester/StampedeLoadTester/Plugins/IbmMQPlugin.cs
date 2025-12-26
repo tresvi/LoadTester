@@ -113,7 +113,7 @@ namespace LoadTester.Plugins
             => (double)ticks * 1_000_000.0 / Stopwatch.Frequency;
 
 
-        public static (double tiempoMs, byte[] messageId) EnviarMensaje(MQQueueManager qmgr, string queueName, string texto)
+        public static (DateTime putDateTime, byte[] messageId) EnviarMensaje(MQQueueManager qmgr, string queueName, string texto)
         {
             MQQueue? cola = null;
             Stopwatch sw = new Stopwatch();
@@ -123,7 +123,7 @@ namespace LoadTester.Plugins
                 int openOptions = MQC.MQOO_OUTPUT;
                 cola = qmgr.AccessQueue(queueName, openOptions);
                 
-                (double tiempoMs, byte[] messageId) resultado = EnviarMensaje(cola, texto);
+                (DateTime putDateTime, byte[] messageId) resultado = EnviarMensaje(cola, texto);
                 return resultado;
             }
             catch (MQException mqe)
@@ -146,7 +146,7 @@ namespace LoadTester.Plugins
             }
         }
 
-        public static (double tiempoMs, byte[] messageId) EnviarMensaje(MQQueue queue, string texto)
+        public static (DateTime putDateTime, byte[] messageId) EnviarMensaje(MQQueue queue, string texto)
         {
             if (queue is null) throw new ArgumentNullException(nameof(queue));
 
@@ -171,11 +171,11 @@ namespace LoadTester.Plugins
            // long t1 = Stopwatch.GetTimestamp();
 
             // Obtener el MessageID asignado por MQ
-           // byte[] messageId = null; //new byte[24];
-            //Array.Copy(mensaje.MessageId, messageId, 24);
+            byte[] messageId = new byte[24];
+            Array.Copy(mensaje.MessageId, messageId, 24);
 
             //return ((t1 - t0) * 1000.0 / Stopwatch.Frequency, messageId);
-            return (0, null!);
+            return (mensaje.PutDateTime, messageId);
         }
 
 
@@ -247,18 +247,68 @@ namespace LoadTester.Plugins
             return (t1 - t0) * 1000.0 / Stopwatch.Frequency;
         }
 
+        /// <summary>
+        /// Recibe un mensaje de la cola usando CorrelationId para hacer match y devuelve el PutDateTime del mensaje recibido
+        /// </summary>
+        /// <param name="queue">Cola de entrada desde donde recibir el mensaje</param>
+        /// <param name="correlationId">CorrelationId usado para hacer match del mensaje (debe ser de 24 bytes)</param>
+        /// <returns>PutDateTime del mensaje recibido</returns>
+        public static DateTime RecibirMensajeYObtenerPutDateTime(MQQueue queue, byte[] correlationId)
+        {
+            if (queue is null) throw new ArgumentNullException(nameof(queue));
+            if (correlationId == null || correlationId.Length != 24)
+                throw new ArgumentException("CorrelationId debe ser un array de 24 bytes", nameof(correlationId));
+
+            var msg = new MQMessage
+            {
+                //CharacterSet = 1208,
+                //Format = MQC.MQFMT_STRING,
+                //MessageId = MQC.MQMI_NONE,
+                CorrelationId = correlationId
+            };
+
+            var gmo = new MQGetMessageOptions
+            {
+                //Options = MQC.MQGMO_WAIT | MQC.MQGMO_CONVERT,
+                Options = MQC.MQGMO_WAIT | MQC.MQGMO_NO_SYNCPOINT | MQC.MQGMO_FAIL_IF_QUIESCING,
+                WaitInterval = 1000,
+                MatchOptions = MQC.MQMO_MATCH_CORREL_ID
+            };
+
+            queue.Get(msg, gmo);
+            
+            // Devolver el PutDateTime del mensaje recibido
+            return msg.PutDateTime;
+        }
+
 
         public static int GetDepth(MQQueueManager queueMgr, string queueName)
         {
-            MQQueue queue = OpenOutputQueue(queueMgr, queueName, true);
-            return queue.CurrentDepth;
+            MQQueue? queue = null;
+            try
+            {
+                queue = OpenOutputQueue(queueMgr, queueName, true);
+                return queue.CurrentDepth;
+            }
+            finally
+            {
+                queue?.Close();
+            }
         }
 
 
         public static int GetMaxDepth(MQQueueManager queueMgr, string queueName)
         {
-            MQQueue queue = OpenOutputQueue(queueMgr, queueName, true);
-            return queue.MaximumDepth;
+            MQQueue? queue = null;
+            try
+            {
+                queue = OpenOutputQueue(queueMgr, queueName, true);
+                return queue.MaximumDepth;
+            }
+            finally
+            {
+                queue?.Close();
+            }
         }
 
 

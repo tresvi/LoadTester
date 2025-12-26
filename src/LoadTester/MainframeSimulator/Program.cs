@@ -5,22 +5,32 @@ using Tresvi.CommandParser;
 using MainframeSimulator.Options;
 using Tresvi.CommandParser.Exceptions;
 using System.Globalization;
+using System.Diagnostics;
 
 namespace MainframeSimulator
 {
+    //TODO: Agregar mensajes de retorno al sistema operativo cuando falla. Ya sea por error de operaciopn o error de parametros.
+
+    enum ExecutionMode { echo, flush }
+
     /// <summary>
     /// Ejemplo de ejecución:
     /// dotnet run -- -s "192.168.0.31" -m "MQGD" -p 1414 -c "CHANNEL1" -i "BNA.XX1.PEDIDO" -o "BNA.XX1.RESPUESTA"
+    /// dotnet run -- -s "10.6.248.10" -m "MQGD" -p 1414 -c "CHANNEL1" -i "BNA.XX1.PEDIDO" -o "BNA.XX1.RESPUESTA"
     /// agregar "-q" para modo silencioso
     /// </summary>
     internal class Program
     {
+        private static long _totalRequests = 0;
+        private static long _totalResponses = 0;
+        private static int _statsLine = -1;
 
         static async Task Main(string[] args)
         {
             try
             {
                 Parameters options = CommandLine.Parse<Parameters>(args);
+                ExecutionMode executionMode;
 
                 if (options.InputQueue?.ToUpper() == options.OutputQueue?.ToUpper())
                 {
@@ -28,10 +38,31 @@ namespace MainframeSimulator
                     return;
                 }
 
+                if (options.ExecutionMode.ToLower() == "echo")
+                    executionMode = ExecutionMode.echo;
+                else if (options.ExecutionMode.ToLower() == "flush")
+                    executionMode = ExecutionMode.flush;
+                else
+                {
+                    Console.WriteLine("Error: Mode must be 'echo' or 'flush'");
+                    return;
+                }
+
                 Console.WriteLine($"Connecting to MQ Server: {options.Server}:{options.Port}");
                 Console.WriteLine($"Manager: {options.Manager}, Channel: {options.Channel}");
-                Console.WriteLine($"Input Queue: {options.InputQueue}, Output Queue: {options.OutputQueue}");
-                Console.WriteLine($"Delay: {options.Delay}ms");
+                Console.WriteLine($"Input Queue: {options.InputQueue}");
+                if (executionMode == ExecutionMode.flush)
+                {
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine("Mode: Flush (messages will be deleted without processing)");
+                    Console.ResetColor();
+                }
+                else
+                {
+                    Console.WriteLine($"Output Queue: {options.OutputQueue}");
+                    Console.WriteLine($"Delay: {options.Delay}ms");
+                    Console.WriteLine($"Mode: {executionMode}");
+                }
                 Console.WriteLine("Starting mainframe simulator...");
 
                 Hashtable connectionProperties = new()
@@ -62,9 +93,7 @@ namespace MainframeSimulator
                     Console.WriteLine("\nShutting down...");
                 };
 
-                // Número de hilos para lectura (aumentado para mejor throughput en I/O bound operations)
-                // Para operaciones I/O como MQ, más threads que CPUs suele dar mejor rendimiento
-                int numberOfThreads = Environment.ProcessorCount;
+                int numberOfThreads = options.ThreadNumber > 0 ? options.ThreadNumber : Environment.ProcessorCount;
                 var tasks = new List<Task>();
 
                 // Iniciar múltiples hilos para leer de la cola de entrada
@@ -78,14 +107,24 @@ namespace MainframeSimulator
                         options.OutputQueue!,
                         options.Delay,
                         options.Quiet,
+                        executionMode,
                         threadId,
                         cts.Token)));
                 }
 
                 Console.WriteLine($"Started {numberOfThreads} worker threads. Press Ctrl+C to stop.");
+                Console.WriteLine(); // Línea en blanco para las estadísticas
+                _statsLine = Console.CursorTop;
+
+                // Iniciar tarea para mostrar estadísticas cada segundo
+                var statsTask = Task.Run(async () => await DisplayStatsAsync(executionMode, cts.Token));
 
                 // Esperar todas las tareas o cancelación
                 await Task.WhenAll(tasks).ConfigureAwait(false);
+                
+                // Cancelar la tarea de estadísticas
+                cts.Cancel();
+                await statsTask.ConfigureAwait(false);
 
                 // Desconectar del MQ Manager
                 queueManager.Disconnect();
@@ -110,32 +149,28 @@ namespace MainframeSimulator
         }
 
         /// <summary>
-        /// Se conecta a la cola de entrada procesa el mensaje recibido y lo coloca en la cola de salida
+        /// Se conecta a la cola de entrada procesa el mensaje recibido y lo coloca en la cola de salida.
+        /// Si el modo es "flush", solo elimina el mensaje sin procesarlo ni responder.
         /// </summary>
-        /// <param name="queueManager"></param>
-        /// <param name="inputQueueName"></param>
-        /// <param name="outputQueueName"></param>
-        /// <param name="delayMs"></param>
-        /// <param name="quiet"></param>
-        /// <param name="threadId"></param>
-        /// <param name="cancellationToken"></param>
-        /// <returns></returns>
         static async Task ProcessMessagesAsync(
             MQQueueManager queueManager,
             string inputQueueName,
             string outputQueueName,
             int delayMs,
             bool quiet,
+            ExecutionMode executionMode,
             int threadId,
             CancellationToken cancellationToken)
         {
-            // Abrir colas para este hilo
-            MQQueue? inputQueue, outputQueue;
+            MQQueue? inputQueue, outputQueue = null;
             
             try
             {
                 inputQueue = queueManager.AccessQueue(inputQueueName, MQC.MQOO_INPUT_AS_Q_DEF + MQC.MQOO_FAIL_IF_QUIESCING);
-                outputQueue = queueManager.AccessQueue(outputQueueName, MQC.MQOO_OUTPUT + MQC.MQOO_FAIL_IF_QUIESCING);
+                if (executionMode != ExecutionMode.flush)
+                {
+                    outputQueue = queueManager.AccessQueue(outputQueueName, MQC.MQOO_OUTPUT + MQC.MQOO_FAIL_IF_QUIESCING);
+                }
             }
             catch (Exception ex)
             {
@@ -143,7 +178,7 @@ namespace MainframeSimulator
                 return;
             }
 
-            // Reutilizar objetos para reducir allocations
+            // Reutilizo objetos para reducir allocations
             var getMessageOptions = new MQGetMessageOptions
             {
                 Options = MQC.MQGMO_WAIT | MQC.MQGMO_FAIL_IF_QUIESCING,
@@ -151,7 +186,6 @@ namespace MainframeSimulator
             };
             var putMessageOptions = new MQPutMessageOptions();
             
-            // Pre-allocar StringBuilder para construir respuestas
             var responseBuilder = new StringBuilder(1024);
             const string ECO_PREFIX = "eco ";
 
@@ -168,6 +202,7 @@ namespace MainframeSimulator
                         byte[] messageId = message.MessageId;
                         message.Seek(0);
                         string messageText = message.ReadString(message.MessageLength);
+                        Interlocked.Increment(ref _totalRequests);
 
                         if (!quiet)
                         {
@@ -175,11 +210,12 @@ namespace MainframeSimulator
                             Console.WriteLine($"[Thread {threadId}] Received message: {preview} {message.PutDateTime:HH:mm:ss.ff}");
                         }
 
-                        // Aplicar delay de forma síncrona si es muy pequeño para evitar overhead de async
+                        if (executionMode == ExecutionMode.flush) continue;
+
                         if (delayMs > 0)
                         {
                             if (delayMs < 50)
-                                Thread.Sleep(delayMs); // Para delays pequeños, usar Sleep síncrono
+                                Thread.Sleep(delayMs); // Para delays pequeños, uso Sleep síncrono
                             else
                                 await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
                         }
@@ -197,8 +233,9 @@ namespace MainframeSimulator
                         };
                         responseMessage.WriteString(responseText);
 
-                        outputQueue.Put(responseMessage, putMessageOptions);
- 
+                        outputQueue?.Put(responseMessage, putMessageOptions);
+                        Interlocked.Increment(ref _totalResponses);
+                        
                         if (!quiet)
                         {
                             string responsePreview = responseText.Length > 50 ? responseText.Substring(0, 50) + "..." : responseText;
@@ -246,6 +283,56 @@ namespace MainframeSimulator
             }
 
             Console.WriteLine($"[Thread {threadId}] Worker thread stopped");
+        }
+
+
+        /// <summary>
+        /// Muestra las estadísticas de respuestas por segundo, actualizándose cada segundo en el mismo 
+        /// de la consola.
+        /// </summary>
+        static async Task DisplayStatsAsync(ExecutionMode executionMode, CancellationToken cancellationToken)
+        {
+            long lastCount = 0;
+            DateTime lastTime = DateTime.UtcNow;
+
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+                    
+                    long currentResponsesCount = Interlocked.Read(ref _totalResponses);
+                    long currentRequestsCount = Interlocked.Read(ref _totalRequests);
+                    DateTime currentTime = DateTime.UtcNow;
+                    
+                    long responsesInLastSecond = currentResponsesCount - lastCount;
+                    double timeElapsed = (currentTime - lastTime).TotalSeconds;
+                    double responsesPerSecond = timeElapsed > 0 ? responsesInLastSecond / timeElapsed : 0;
+                    
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    
+                    // Guardar posición actual del cursor
+                    int currentTop = Console.CursorTop;
+                    int currentLeft = Console.CursorLeft;
+                    
+                    if (_statsLine >= 0)
+                    {
+                        Console.SetCursorPosition(0, _statsLine);
+                        Console.Write($"Responses per second: {responsesPerSecond:F1}        "); // Espacios para limpiar caracteres anteriores                        
+                        Console.SetCursorPosition(0, _statsLine + 1);
+                        Console.Write($"Total request read: {currentRequestsCount}        ");
+                        Console.SetCursorPosition(0, _statsLine + 2);
+                        Console.Write($"Total responses sent: {currentResponsesCount}        ");
+                        Console.SetCursorPosition(currentLeft, currentTop);
+                    }
+                    
+                    Console.ResetColor();
+                    lastCount = currentResponsesCount;
+                    lastTime = currentTime;
+                }
+                catch (OperationCanceledException) { break; }
+                catch (Exception) { }
+            }
         }
 
  
