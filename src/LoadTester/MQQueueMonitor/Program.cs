@@ -76,13 +76,16 @@ namespace MQQueueMonitor
 
             try
             {
-                MQQueueManager queueMgr = new MQQueueManager(managerName, properties);
+                MQQueueManager queueMgr = new(managerName, properties);
 
                 // Inicializar estadísticas por cola
-                Dictionary<string, QueueStatistics> queueStats = new Dictionary<string, QueueStatistics>();
-                Dictionary<string, int> linePositions = new Dictionary<string, int>(); // Para rastrear las posiciones de las líneas
+                Dictionary<string, QueueStatistics> queueStats = new();
+                Dictionary<string, int> linePositions = new(); // Para rastrear las posiciones de las líneas
+                
+                ConsoleHProgressBar progressBar = new(40, 63, 88, true);
 
                 Console.Clear();
+                Console.WriteLine("Presione Ctrl+C para terminar el proceso...\n");
 
                 // Mostrar estructura inicial de los párrafos
                 foreach (string queueName in queues)
@@ -104,10 +107,22 @@ namespace MQQueueMonitor
                     Console.WriteLine($"Registro máx: 0 (00:00:00.00)");
                     linePositions[$"{queueName}_Saturation"] = Console.CursorTop;
                     Console.WriteLine($"Veces que saturó: 0");
+                    linePositions[$"{queueName}_ProgressBar"] = Console.CursorTop;
+                    Console.WriteLine("[                                        ]");
                     Console.WriteLine();
                     Console.WriteLine();
                     Console.ResetColor();
                 }
+
+                // Ocultar el cursor para evitar parpadeo durante las actualizaciones
+                Console.CursorVisible = false;
+
+                // Configurar manejador para restaurar el cursor al presionar Ctrl+C
+                Console.CancelKeyPress += (sender, e) =>
+                {
+                    Console.CursorVisible = true;
+                    e.Cancel = false; // Permitir que el programa termine normalmente
+                };
 
                 while (true)
                 {
@@ -147,24 +162,19 @@ namespace MQQueueMonitor
                         UpdateReportLine(linePositions[$"{queueName}_Profundidad"], $"Profundidad: {stats.CurrentDepth}");
                         
                         if (stats.MinDepth == int.MaxValue)
-                        {
                             UpdateReportLine(linePositions[$"{queueName}_Min"], "Registro mín: N/A");
-                        }
                         else
-                        {
                             UpdateReportLine(linePositions[$"{queueName}_Min"], $"Registro mín: {stats.MinDepth} ({stats.MinDepthTimestamp:HH:mm:ss.ff})");
-                        }
                         
                         if (stats.MaxDepthRecorded == int.MinValue)
-                        {
                             UpdateReportLine(linePositions[$"{queueName}_Max"], "Registro máx: N/A");
-                        }
                         else
-                        {
                             UpdateReportLine(linePositions[$"{queueName}_Max"], $"Registro máx: {stats.MaxDepthRecorded} ({stats.MaxDepthTimestamp:HH:mm:ss.ff})");
-                        }
                         
                         UpdateReportLine(linePositions[$"{queueName}_Saturation"], $"Veces que saturó: {stats.SaturationCount}");
+                        
+                        // Actualizar barra de progreso con colores
+                        progressBar.Update(linePositions[$"{queueName}_ProgressBar"], stats.CurrentDepth, stats.MaxDepth);
                     }
 
                     Thread.Sleep(options.RefreshInterval);
@@ -172,12 +182,19 @@ namespace MQQueueMonitor
             }
             catch (MQException ex)
             {
+                Console.CursorVisible = true; // Restaurar cursor visible
                 Console.WriteLine(ex);
                 Console.WriteLine($"Reason = {ex.ReasonCode} Msg= {ex.Message}");
             }
             catch (Exception ex)
             {
+                Console.CursorVisible = true; // Restaurar cursor visible
                 Console.Error.WriteLine(ex);
+            }
+            finally
+            {
+                // Asegurar que el cursor siempre se restaure al finalizar
+                Console.CursorVisible = true;
             }
 
         }
@@ -209,7 +226,7 @@ namespace MQQueueMonitor
             if (string.IsNullOrWhiteSpace(ip))
                 throw new ArgumentException("La IP del servidor MQ no puede estar vacía.");
             
-            if (!IPAddress.TryParse(ip, out IPAddress ipAddress))
+            if (!IPAddress.TryParse(ip, out _))
                 throw new ArgumentException($"La IP '{ip}' no es una dirección IP válida (IPv4 o IPv6).");
 
             string portStr = partes[1].Trim();
@@ -241,7 +258,7 @@ namespace MQQueueMonitor
                 throw new ArgumentException("El parámetro queues no puede estar vacío.");
 
             string[] queues = queuesString.Split(',');
-            List<string> result = new List<string>();
+            List<string> result = [];
 
             foreach (string queue in queues)
             {
@@ -270,9 +287,13 @@ namespace MQQueueMonitor
         {
             int currentTop = Console.CursorTop;
             int currentLeft = Console.CursorLeft;
+            ConsoleColor originalColor = Console.ForegroundColor;
 
+            // Mantener el cursor oculto (ya está oculto desde el inicio)
             Console.SetCursorPosition(0, line);
+            Console.ForegroundColor = ConsoleColor.White; // Color blanco por defecto
             Console.Write(text.PadRight(Console.WindowWidth - 1)); // Limpiar el resto de la línea
+            Console.ForegroundColor = originalColor;
 
             Console.SetCursorPosition(currentLeft, currentTop);
         }
