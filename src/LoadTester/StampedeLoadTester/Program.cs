@@ -20,6 +20,7 @@ namespace StampedeLoadTester
     {
         //const string MENSAJE = "    00000008500000020251118115559N0001   000000PC  01100500000000000000                        00307384";
         const string MENSAJE = "    00000008500000020251118114435G00111  000000DGPC011005590074200180963317";
+        //const string MENSAJE_CON_USUARIO_Y_SUCURSAL = "    00000777700000020251118114435%XXXXXX%000000DGPC011005590074200180963317";
         /// <summary>
         /// Crea una lista de Hashtables con las propiedades de conexión MQ basadas en MqConnectionParams
         /// Genera 3 entradas (para soportar hasta 4 hilos de conexión en TestManager)
@@ -173,7 +174,7 @@ namespace StampedeLoadTester
             List<(int? result, string ipSlave)> resultados = await GetSlavesResultsAsync(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
             PrintResults(resultados, nroMensajesColocados);
 
-            Console.Write($"\nEsperando a que la cola {mqConnParams.OutputQueue} procese todos los mensajes...");
+            Console.Write($"\nEsperando a que se procesen todos los mensajes de la cola {mqConnParams.OutputQueue} ...");
             List<(DateTime hora, int profundidad)> medicionesProfundidad = [];
             testManager.WaitForQueueEmptied(mqConnParams.OutputQueue, measurements: out medicionesProfundidad);
             Console.WriteLine($": OK");
@@ -601,7 +602,7 @@ namespace StampedeLoadTester
             double p99 = Statistics.Percentile(mensajesPorSegundo, 99);
 
             Console.WriteLine($"Total de intervalos analizados: {mensajesPorSegundo.Count}");
-            Console.WriteLine($"\n-------- Velocidad de Procesamiento (Mensajes/Segundo) -------");
+            Console.WriteLine($"\n----------- Velocidad de Procesamiento MQ+Mainframe ----------");
             Console.WriteLine($"Promedio:              {promedio:F2} mensajes/segundo");
             Console.WriteLine($"Desviación estándar:   {desviacionEstandar:F2} mensajes/segundo");
             Console.WriteLine($"Mínimo:                {minimo:F2} mensajes/segundo");

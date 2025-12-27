@@ -36,6 +36,9 @@ internal sealed class TestManager : IDisposable
     private readonly List<Hashtable> _connectionProperties;
     private readonly MQQueueManager?[] _queueManagers = new MQQueueManager?[4];
     private readonly MQQueue?[] _outputQueues = new MQQueue?[4];
+    
+    private static int _contadorSegmento = 0;
+    private const int MAX_SEGMENTOS = 164;
 
     public TestManager(string queueManagerName, string outputQueueName, string mensaje, List<Hashtable> connectionProperties)
     {
@@ -113,8 +116,14 @@ internal sealed class TestManager : IDisposable
             while (Stopwatch.GetTimestamp() < horaFin)
             {
                 //Thread.Sleep(14);
-                DelayMicroseconds(12800);
-                (DateTime putDateTime, byte[] messageId) = IbmMQPlugin.EnviarMensaje(queueActual, _mensaje);
+                //DelayMicroseconds(9800);
+                
+                // Incrementar contador de forma thread-safe y obtener valor entre 1 y 164
+                int valorSegmento = (Interlocked.Increment(ref _contadorSegmento) - 1) % MAX_SEGMENTOS + 1;
+                string segmentoReemplazo = $"D{valorSegmento:D5}  "; // 8 caracteres: "D" + 5 dígitos + 2 espacios
+                string mensajeConSegmento = _mensaje.Replace("%XXXXXX%", segmentoReemplazo);
+                
+                (DateTime putDateTime, byte[] messageId) = IbmMQPlugin.EnviarMensaje(queueActual, mensajeConSegmento);
                 
                 MensajeEnviado mensajeEnviado = new(messageId, putDateTime);
                 MensajesEnviados[hiloIndex].Add(mensajeEnviado);
