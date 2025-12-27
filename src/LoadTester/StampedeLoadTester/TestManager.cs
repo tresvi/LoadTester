@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Threading;
 using System.Threading.Tasks;
 using IBM.WMQ;
@@ -35,6 +36,9 @@ internal sealed class TestManager : IDisposable
     private readonly List<Hashtable> _connectionProperties;
     private readonly MQQueueManager?[] _queueManagers = new MQQueueManager?[4];
     private readonly MQQueue?[] _outputQueues = new MQQueue?[4];
+    
+    private static int _contadorSegmento = 0;
+    private const int MAX_SEGMENTOS = 164;
 
     public TestManager(string queueManagerName, string outputQueueName, string mensaje, List<Hashtable> connectionProperties)
     {
@@ -112,8 +116,14 @@ internal sealed class TestManager : IDisposable
             while (Stopwatch.GetTimestamp() < horaFin)
             {
                 //Thread.Sleep(14);
-                //DelayMicroseconds(12500);
-                (DateTime putDateTime, byte[] messageId) = IbmMQPlugin.EnviarMensaje(queueActual, _mensaje);
+                //DelayMicroseconds(9800);
+                
+                // Incrementar contador de forma thread-safe y obtener valor entre 1 y 164
+                int valorSegmento = (Interlocked.Increment(ref _contadorSegmento) - 1) % MAX_SEGMENTOS + 1;
+                string segmentoReemplazo = $"D{valorSegmento:D5}  "; // 8 caracteres: "D" + 5 dígitos + 2 espacios
+                string mensajeConSegmento = _mensaje.Replace("%XXXXXX%", segmentoReemplazo);
+                
+                (DateTime putDateTime, byte[] messageId) = IbmMQPlugin.EnviarMensaje(queueActual, mensajeConSegmento);
                 
                 MensajeEnviado mensajeEnviado = new(messageId, putDateTime);
                 MensajesEnviados[hiloIndex].Add(mensajeEnviado);
@@ -138,7 +148,6 @@ internal sealed class TestManager : IDisposable
 
         while (Stopwatch.GetTimestamp() - start < ticksObjetivo)
         {
-            // busy wait
         }
     }
 
@@ -207,9 +216,10 @@ internal sealed class TestManager : IDisposable
     /// <param name="queueName">Nombre de la cola a monitorear</param>
     /// <param name="cancellationToken">Token para cancelar el monitoreo</param>
     /// <returns>Diccionario donde la clave es el tiempo transcurrido en milisegundos desde el inicio y el valor es la profundidad de la cola</returns>
+    //TODO: Deberia conectarme a una cola especifica pasada por nombre, o asumir la de TestManager como hago ahora?
     public async Task<Dictionary<int, int>> MonitorearProfundidadColaAsync(string queueName, CancellationToken cancellationToken)
     {
-        Dictionary<int, int> mediciones = new Dictionary<int, int>();
+        Dictionary<int, int> mediciones = [];
         const int intervaloMs = 100;
         MQQueue? inquireQueue = null;
 
@@ -220,7 +230,7 @@ internal sealed class TestManager : IDisposable
 
             inquireQueue = this.AbrirQueueInquire();
 
-            long tiempoUltimaMedicion = 0;
+            long horaUltimaMedicion = 0;
             Stopwatch swEnsayo = new();
             Stopwatch swMedicion = new();
             swEnsayo.Start();
@@ -229,7 +239,7 @@ internal sealed class TestManager : IDisposable
             {
                 try
                 {
-                    tiempoUltimaMedicion = swEnsayo.ElapsedMilliseconds;
+                    horaUltimaMedicion = swEnsayo.ElapsedMilliseconds;
 
                     swMedicion.Restart();
                     int profundidad = inquireQueue.CurrentDepth;
@@ -237,27 +247,16 @@ internal sealed class TestManager : IDisposable
 
                     mediciones[(int)swEnsayo.ElapsedMilliseconds] = profundidad;
 
-                    // Para delays pequeños (< 15ms), Thread.Sleep es más preciso que Task.Delay en Windows
-                    // Usamos Task.Run para mantener la asincronía mientras usamos Thread.Sleep
                      await Task.Run(() =>
                      {
                          long tiempoRestante = intervaloMs - tiempoEspera;
-                         //TODO: achicar este algoritmo.
-                         //tiempoRestante = tiempoRestante < 0 ? 0 : tiempoRestante;
-                         Console.WriteLine($"Tiemporestante {tiempoRestante}");
+                         tiempoRestante = tiempoRestante < 0 ? 0 : tiempoRestante;
+
                          while (!cancellationToken.IsCancellationRequested)
                          {
-                             if (swEnsayo.ElapsedMilliseconds >= tiempoUltimaMedicion + tiempoRestante) break;
+                             if (swEnsayo.ElapsedMilliseconds >= horaUltimaMedicion + tiempoRestante) break;
                              Thread.Sleep((int)Math.Min(tiempoRestante, 5));
                          }
-                         /* // Verificar cancelación periódicamente durante el sleep
-                          int tiempoRestante = intervaloMs;
-                          while (tiempoRestante > 0 && !cancellationToken.IsCancellationRequested)
-                          {
-                              int sleepTime = Math.Min(tiempoRestante, 5); // Sleep en chunks de 5ms para poder cancelar
-                              Thread.Sleep(sleepTime);
-                              tiempoRestante -= sleepTime;
-                          }*/
                      }, cancellationToken);
                      
                 }
@@ -357,7 +356,7 @@ internal sealed class TestManager : IDisposable
     /// <param name="timeoutMs">Timeout en milisegundos. Si es null, esperará indefinidamente. Valor por defecto: null</param>
     /// <param name="pollingIntervalMs">Intervalo en milisegundos entre consultas de profundidad. Valor por defecto: 100ms</param>
     /// <returns>true si la cola se vació, false si se alcanzó el timeout</returns>
-    public bool WaitForQueueEmptied(string queueName, int? timeoutMs = null, int pollingIntervalMs = 100)
+    public bool WaitForQueueEmptied(string queueName, out List<(DateTime, int)> measurements, int? timeoutMs = null, int pollingIntervalMs = 100)
     {
         if (_queueManagers[0] is null)
             throw new InvalidOperationException("Las conexiones no están inicializadas");
@@ -366,7 +365,8 @@ internal sealed class TestManager : IDisposable
             throw new ArgumentException("El intervalo de polling debe ser mayor a 0", nameof(pollingIntervalMs));
 
         Stopwatch sw = Stopwatch.StartNew();
-        
+        measurements = new();
+
         while (true)
         {
             try
@@ -384,8 +384,11 @@ internal sealed class TestManager : IDisposable
                 // Verificar timeout si está configurado
                 if (timeoutMs.HasValue && sw.ElapsedMilliseconds >= timeoutMs.Value)
                     return false;
-//TODO: aca puedo obtener el maximo sostenible. Si tengo mas de 2 mediciones (debo descartar las puntas), puedo calcular la velocidad de througput máximo
-//Promedio y saco desvio estandar.
+
+                measurements.Add((DateTime.Now, depth));
+
+                //TODO: aca puedo obtener el maximo sostenible. Si tengo mas de 2 mediciones (debo descartar las puntas), puedo calcular la velocidad de througput máximo
+                //Promedio y saco desvio estandar.
                 Thread.Sleep(pollingIntervalMs);
             }
             catch (MQException mqe) when (mqe.ReasonCode == 2017) // MQRC_HANDLE_NOT_AVAILABLE

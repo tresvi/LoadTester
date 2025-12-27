@@ -20,6 +20,7 @@ namespace StampedeLoadTester
     {
         //const string MENSAJE = "    00000008500000020251118115559N0001   000000PC  01100500000000000000                        00307384";
         const string MENSAJE = "    00000008500000020251118114435G00111  000000DGPC011005590074200180963317";
+        //const string MENSAJE_CON_USUARIO_Y_SUCURSAL = "    00000777700000020251118114435%XXXXXX%000000DGPC011005590074200180963317";
         /// <summary>
         /// Crea una lista de Hashtables con las propiedades de conexión MQ basadas en MqConnectionParams
         /// Genera 3 entradas (para soportar hasta 4 hilos de conexión en TestManager)
@@ -94,10 +95,10 @@ namespace StampedeLoadTester
             RemoteControllerService remoteController = new();
             List<Hashtable> connectionProperties = CreateConnectionProperties(mqConnParams);
             using TestManager testManager = new(mqConnParams.MqManagerName, mqConnParams.OutputQueue, MENSAJE, connectionProperties);
-            
+
             CancellationTokenSource? monitorProfCts = null;
             Task<Dictionary<int, int>>? taskMonitor = null;
-            
+
             try
             {
                 Console.Write("Inicializando conexiones MQ en el master...");
@@ -146,7 +147,7 @@ namespace StampedeLoadTester
             }
 
             Console.WriteLine("Iniciando monitoreo de profundidad de la cola...");
-            monitorProfCts = new CancellationTokenSource();    
+            monitorProfCts = new CancellationTokenSource();
             taskMonitor = testManager.MonitorearProfundidadColaAsync(mqConnParams.OutputQueue, monitorProfCts.Token);
 
             Console.ForegroundColor = ConsoleColor.Green;
@@ -172,10 +173,12 @@ namespace StampedeLoadTester
 
             List<(int? result, string ipSlave)> resultados = await GetSlavesResultsAsync(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
             PrintResults(resultados, nroMensajesColocados);
-            
-            Console.Write($"\nEsperando a que la cola {mqConnParams.OutputQueue} procese todos los mensajes...");
-            testManager.WaitForQueueEmptied(mqConnParams.OutputQueue);
+
+            Console.Write($"\nEsperando a que se procesen todos los mensajes de la cola {mqConnParams.OutputQueue} ...");
+            List<(DateTime hora, int profundidad)> medicionesProfundidad = [];
+            testManager.WaitForQueueEmptied(mqConnParams.OutputQueue, measurements: out medicionesProfundidad);
             Console.WriteLine($": OK");
+            PrintQueueStatistics(medicionesProfundidad);
             Console.WriteLine($"Recibiendo respuestas y actualizando put date time...");
             testManager.RecibirRespuestasYActualizarPutDateTime(testManager.MensajesEnviados!, mqConnParams.InputQueue);
             PrintMessagesResults2(testManager.MensajesEnviados);
@@ -400,54 +403,6 @@ namespace StampedeLoadTester
             Console.ResetColor();
         }
 
-        private static void PrintMessagesResults(List<TestManager.MensajeEnviado>[]? mensajesEnviados)
-        {
-            if (mensajesEnviados == null)
-            {
-                Console.WriteLine("No hay mensajes para imprimir.");
-                return;
-            }
-
-            Console.ForegroundColor = ConsoleColor.DarkYellow;
-            Console.WriteLine("\n-----------------MENSAJES ENVIADOS-----------------");
-            int contadorMsjes = 0;
-
-            for (int hiloIndex = 0; hiloIndex < mensajesEnviados.Length; hiloIndex++)
-            {
-                var listaMensajes = mensajesEnviados[hiloIndex];
-                
-                if (listaMensajes == null || listaMensajes.Count == 0)
-                {
-                    Console.WriteLine($"Hilo {hiloIndex}: Sin mensajes");
-                    continue;
-                }
-
-                foreach (var mensaje in listaMensajes)
-                {
-                    // Convertir MessageId a string hexadecimal
-                    string messageIdHex = mensaje.MessageId != null 
-                        ? BitConverter.ToString(mensaje.MessageId).Replace("-", "") 
-                        : "N/A";
-                    
-                    // Calcular diferencia en milisegundos entre RequestPutDateTime y ResponsePutDateTime
-                    string diferenciaMs;
-                    if (mensaje.ResponsePutDateTime == default(DateTime))
-                    {
-                        diferenciaMs = "N/A";
-                    }
-                    else
-                    {
-                        double diferencia = (mensaje.ResponsePutDateTime - mensaje.RequestPutDateTime).TotalMilliseconds;
-                        diferenciaMs = $"{diferencia} ms";
-                    }
-                    
-                    Console.WriteLine($"Hilo {hiloIndex} - NroMsje {++contadorMsjes} - {mensaje.RequestPutDateTime:yyyy-MM-dd HH:mm:ss.fff} - Diferencia: {diferenciaMs} - MessageId: {messageIdHex}");
-                }
-            }
-            
-            Console.ResetColor();
-        }
-
 
         private static void PrintMessagesResults2(List<TestManager.MensajeEnviado>[]? mensajesEnviados)
         {
@@ -461,7 +416,7 @@ namespace StampedeLoadTester
             Console.WriteLine("\n================== ESTADÍSTICAS DE LATENCIA ==================");
             
             // Recolectar todas las diferencias válidas y encontrar tiempos primero/último
-            List<double> diferenciasMs = new List<double>();
+            List<double> diferenciasMs = [];
             int totalMensajes = 0;
             int mensajesConRespuesta = 0;
             int mensajesSinRespuesta = 0;
@@ -524,7 +479,7 @@ namespace StampedeLoadTester
 
             if (diferenciasMs.Count == 0)
             {
-                Console.WriteLine("⚠️  No hay mensajes con respuesta para calcular estadísticas.");
+                Console.WriteLine("No hay mensajes con respuesta para calcular estadísticas.");
                 Console.ResetColor();
                 return;
             }
@@ -572,6 +527,105 @@ namespace StampedeLoadTester
             double tasaExito = totalMensajes > 0 ? (mensajesConRespuesta / (double)totalMensajes) * 100 : 0;
             Console.WriteLine($"\n----------------------- Tasa de Éxito ------------------------");
             Console.WriteLine($"Tasa de respuestas recibidas: {tasaExito:F2}%");
+
+            Console.WriteLine("==============================================================\n");
+            Console.ResetColor();
+        }
+
+        private static void PrintQueueStatistics(List<(DateTime hora, int profundidad)> mediciones)
+        {
+            if (mediciones == null || mediciones.Count < 4)
+            {
+                Console.WriteLine("No hay suficientes mediciones para calcular estadísticas (se requieren al menos 4 mediciones).");
+                return;
+            }
+
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("\n================== ESTADÍSTICAS DE PROCESAMIENTO DE COLA ==================");
+            
+            // Descartar primera y última medición - usar índices directamente sin LINQ
+            int inicio = 1; // Empezar desde el segundo elemento
+            int fin = mediciones.Count - 2; // Terminar en el penúltimo elemento
+            
+            if (fin < inicio)
+            {
+                Console.WriteLine("No hay suficientes mediciones después de descartar la primera y última.");
+                Console.ResetColor();
+                return;
+            }
+
+            // Calcular mensajes/segundo entre mediciones consecutivas
+            List<double> mensajesPorSegundo = [];
+            
+            for (int i = inicio; i <= fin - 1; i++)
+            {
+                var medicionActual = mediciones[i];
+                var medicionSiguiente = mediciones[i + 1];
+                
+                int profundidadAnterior = medicionActual.profundidad;
+                int profundidadActual = medicionSiguiente.profundidad;
+                
+                // Calcular tiempo transcurrido en segundos
+                double tiempoTranscurridoSegundos = (medicionSiguiente.hora - medicionActual.hora).TotalSeconds;
+                
+                // Si la profundidad disminuyó, significa que se procesaron mensajes
+                if (profundidadAnterior > profundidadActual && tiempoTranscurridoSegundos > 0)
+                {
+                    int mensajesProcesados = profundidadAnterior - profundidadActual;
+                    double tasa = mensajesProcesados / tiempoTranscurridoSegundos;
+                    mensajesPorSegundo.Add(tasa);
+                }
+                // Si la profundidad aumentó o se mantuvo, no hubo procesamiento (o llegaron más mensajes)
+                // No agregamos nada a la lista en este caso
+            }
+
+            if (mensajesPorSegundo.Count == 0)
+            {
+                Console.WriteLine("No se pudo calcular ninguna tasa de procesamiento (la cola no disminuyó entre mediciones).");
+                Console.ResetColor();
+                return;
+            }
+
+            // Calcular estadísticas usando MathNet.Numerics
+            var estadisticas = new DescriptiveStatistics(mensajesPorSegundo);
+            
+            double promedio = estadisticas.Mean;
+            double desviacionEstandar = estadisticas.StandardDeviation;
+            double minimo = estadisticas.Minimum;
+            double maximo = estadisticas.Maximum;
+            
+            // Percentiles usando MathNet.Numerics
+            double p25 = Statistics.Percentile(mensajesPorSegundo, 25);
+            double p50 = Statistics.Median(mensajesPorSegundo); // Mediana es igual P50
+            double p75 = Statistics.Percentile(mensajesPorSegundo, 75);
+            double p95 = Statistics.Percentile(mensajesPorSegundo, 95);
+            double p99 = Statistics.Percentile(mensajesPorSegundo, 99);
+
+            Console.WriteLine($"Total de intervalos analizados: {mensajesPorSegundo.Count}");
+            Console.WriteLine($"\n----------- Velocidad de Procesamiento MQ+Mainframe ----------");
+            Console.WriteLine($"Promedio:              {promedio:F2} mensajes/segundo");
+            Console.WriteLine($"Desviación estándar:   {desviacionEstandar:F2} mensajes/segundo");
+            Console.WriteLine($"Mínimo:                {minimo:F2} mensajes/segundo");
+            Console.WriteLine($"Máximo:                {maximo:F2} mensajes/segundo");
+
+            Console.WriteLine($"\n------------------------ Percentiles -------------------------");
+            Console.WriteLine($"P25:                   {p25:F2} mensajes/segundo");
+            Console.WriteLine($"P50 (Mediana):         {p50:F2} mensajes/segundo");
+            Console.WriteLine($"P75:                   {p75:F2} mensajes/segundo");
+            Console.WriteLine($"P95:                   {p95:F2} mensajes/segundo");
+            Console.WriteLine($"P99:                   {p99:F2} mensajes/segundo");
+
+            // Estadística adicional: Coeficiente de variación
+            double coeficienteVariacion = promedio > 0 ? (desviacionEstandar / promedio) * 100 : 0;
+            Console.WriteLine($"\n------------------------ Variabilidad ------------------------");
+            Console.WriteLine($"Coeficiente de variación: {coeficienteVariacion:F2}%");
+            
+            if (coeficienteVariacion < 15)
+                Console.WriteLine("  → Baja variabilidad (proceso consistente)");
+            else if (coeficienteVariacion < 30)
+                Console.WriteLine("  → Variabilidad moderada");
+            else
+                Console.WriteLine("  → Alta variabilidad (proceso inconsistente)");
 
             Console.WriteLine("==============================================================\n");
             Console.ResetColor();
