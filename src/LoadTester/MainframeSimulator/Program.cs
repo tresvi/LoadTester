@@ -6,6 +6,7 @@ using MainframeSimulator.Options;
 using Tresvi.CommandParser.Exceptions;
 using System.Globalization;
 using System.Diagnostics;
+using System.Runtime;
 
 namespace MainframeSimulator
 {
@@ -27,6 +28,9 @@ namespace MainframeSimulator
 
         static async Task Main(string[] args)
         {
+            // Configurar GC para mejor rendimiento en aplicaciones de alto throughput
+            GCSettings.LatencyMode = GCLatencyMode.SustainedLowLatency;
+            
             try
             {
                 Parameters options = CommandLine.Parse<Parameters>(args);
@@ -220,8 +224,12 @@ namespace MainframeSimulator
                                 await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
                         }
 
-                        // Construir respuesta de forma más eficiente
+                        // Construir respuesta de forma más eficiente con EnsureCapacity
+                        //TODO: Aun asi, tanto movimiento de strings, causa deasiadas ejecuciones del GC, lo que causa qe las respuestas se hagan de a "rafagas".
+                        // Eso quedo demostrado, al responder un string hardcodeado, lo que permitio tasas de respuesta muy constantes y sin cortes.
+                        int estimatedCapacity = ECO_PREFIX.Length + messageText.Length;
                         responseBuilder.Clear();
+                        responseBuilder.EnsureCapacity(estimatedCapacity);
                         responseBuilder.Append(ECO_PREFIX);
                         responseBuilder.Append(messageText);
                         string responseText = responseBuilder.ToString();
