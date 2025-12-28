@@ -1,4 +1,4 @@
-namespace MQQueueMonitor;
+namespace MQQueueMonitor.ConsoleComponents;
 
 /// <summary>
 /// Clase para mostrar una barra de progreso horizontal en la consola con zonas de colores

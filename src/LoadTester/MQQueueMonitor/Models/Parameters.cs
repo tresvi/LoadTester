@@ -1,6 +1,6 @@
 using Tresvi.CommandParser.Attributtes.Keywords;
 
-namespace MQQueueMonitor;
+namespace MQQueueMonitor.Models;
 
 [Verb("monitor", "Monitorea la profundidad de una cola MQ", true)]
 public class CliParameters
