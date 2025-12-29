@@ -11,6 +11,7 @@ using System.Runtime;
 namespace MainframeSimulator
 {
     //TODO: Agregar mensajes de retorno al sistema operativo cuando falla. Ya sea por error de operaciopn o error de parametros.
+    //TODO: Agregar manejo de ConnectionString de "Mainframe"
 
     enum ExecutionMode { echo, flush }
 
