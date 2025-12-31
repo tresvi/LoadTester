@@ -14,9 +14,9 @@ using Tresvi.CommandParser.Attributtes.Keywords;
 
 namespace StampedeLoadTester
 {
-    //dotnet run -- -f "xxx" -s "192.168.0.31, 192.168.0.24" -p 8888 -c -m "192.168.0.31:1414:CHANNEL1:MQGD" -d 2 -i "BNA.XX1.RESPUESTA" -o "BNA.XX1.PEDIDO"
-    //dotnet run -- -f "xxx" -c -m "10.6.248.10:1414:CHANNEL1:MQGD" -d 2 -i "BNA.CU1.RESPUESTA" -o "BNA.CU1.PEDIDO"
-    //dotnet run -- -f "xxx" -c -m "10.6.248.10:1414:CHANNEL1:MQGD" -d 2 -i "BNA.CU2.RESPUESTA" -o "BNA.CU2.PEDIDO"
+    //dotnet run -- -f "xxx" -s "192.168.0.31, 192.168.0.24" -p 8888 -m "192.168.0.31:1414:CHANNEL1:MQGD" -d 2 -i "BNA.XX1.RESPUESTA" -o "BNA.XX1.PEDIDO"
+    //dotnet run -- -f "xxx" -m "10.6.248.10:1414:CHANNEL1:MQGD" -d 2 -i "BNA.CU1.RESPUESTA" -o "BNA.CU1.PEDIDO"
+    //dotnet run -- -f "xxx" -m "10.6.248.10:1414:CHANNEL1:MQGD" -d 2 -i "BNA.CU2.RESPUESTA" -o "BNA.CU2.PEDIDO"
     //TODO: Cuando se alcanza a ver la cola de msjes de Respuesta vacios, dejar de intentar recuperar las respuestas, porque todos van a dar MQRC_NO_MSG_AVAILABLE eternamente
     //TODO: Hacer que el ensayo se detenga por cola llena y continue con el siguiente punto
     //TODO: Evaluar si la funcion ClearQueue es necesaria, ya que siempre deberia vaciarlas
@@ -134,17 +134,13 @@ namespace StampedeLoadTester
                 testManager.InicializarConexiones();
                 Console.WriteLine(": OK");
 
-                if (masterVerb.ClearQueue)
-                {
-                    float msjesEliminadosPorSegundo = 0;
-                    Console.Write("Vaciando cola de pedido...");
-                    msjesEliminadosPorSegundo = testManager.VaciarCola(mqConnParams.OutputQueue);
-                    Console.WriteLine($": OK ({msjesEliminadosPorSegundo:F2} msjes/s)");
+                Console.Write("Vaciando cola de pedido...");
+                float msjesEliminadosPorSegundo = testManager.VaciarCola(mqConnParams.OutputQueue);
+                Console.WriteLine($": OK ({msjesEliminadosPorSegundo:F2} msjes/s)");
 
-                    Console.Write("Vaciando cola de respuesta...");
-                    msjesEliminadosPorSegundo = testManager.VaciarCola(mqConnParams.InputQueue);
-                    Console.WriteLine($": OK ({msjesEliminadosPorSegundo:F2} msjes/s)");
-                }
+                Console.Write("Vaciando cola de respuesta...");
+                msjesEliminadosPorSegundo = testManager.VaciarCola(mqConnParams.InputQueue);
+                Console.WriteLine($": OK ({msjesEliminadosPorSegundo:F2} msjes/s)");
 
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.Write("Realizando WarmUp en el master...");
@@ -208,9 +204,12 @@ namespace StampedeLoadTester
             List<(DateTime hora, int profundidad)> medicionesProfundidad = [];
             testManager.WaitForQueueEmptied(mqConnParams.OutputQueue, measurements: out medicionesProfundidad);
             Console.WriteLine($": OK");
+
             PrintQueueStatistics(medicionesProfundidad);
+            
             Console.WriteLine($"Recibiendo respuestas y actualizando put date time...");
             testManager.RecibirRespuestasYActualizarPutDateTime(testManager.MensajesEnviados!, mqConnParams.InputQueue);
+            
             PrintMessagesResults2(testManager.MensajesEnviados);
 
             //Sincronizar relojes de los esclavos
