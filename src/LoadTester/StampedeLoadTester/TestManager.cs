@@ -15,15 +15,45 @@ internal sealed class TestManager : IDisposable
     
     internal struct MensajeEnviado
     {
+        /// <summary>
+        /// Contador estático y thread-safe para asignar el orden secuencial
+        /// </summary>
+        private static int _orderingCounter = 0;
+
         public byte[] MessageId;
-        public DateTime RequestPutDateTime;
+
+        /// <summary>
+        /// Orden secuencial en que fue enviado el mensaje (asignado automáticamente)
+        /// </summary>
+        public int Ordering { get; private set; }
+
+        private DateTime _requestPutDateTime;
+
+        /// <summary>
+        /// Fecha y hora en que el mensaje fue colocado en la cola de salida.
+        /// Al asignarse, automáticamente se asigna un valor secuencial a Ordering.
+        /// </summary>
+        public DateTime RequestPutDateTime
+        {
+            get => _requestPutDateTime;
+            set
+            {
+                _requestPutDateTime = value;
+                // Asignar orden secuencial thread-safe solo si aún no se ha asignado
+                if (Ordering == 0)
+                {
+                    Ordering = Interlocked.Increment(ref _orderingCounter);
+                }
+            }
+        }
+
         public DateTime ResponsePutDateTime;
     
         public MensajeEnviado(byte[] messageId, DateTime requestPutDateTime)
         {
             MessageId = messageId;
             RequestPutDateTime = requestPutDateTime;
-            ResponsePutDateTime = default; // Vacío por ahora
+            ResponsePutDateTime = default;
         }
         
     }
@@ -100,42 +130,59 @@ internal sealed class TestManager : IDisposable
         return IbmMQPlugin.VaciarCola(_queueManagers[0]!, queueName);
     }
 
-    public int EjecutarWriteQueueLoadTest(TimeSpan duracionEnsayo, int numHilos)
+    public (int messageCounter, bool colaLlena) EjecutarWriteQueueLoadTest(TimeSpan duracionEnsayo, int numHilos, int delayMicroseconds)
     {
         int messageCounter = 0;
+        bool colaLlena = false;
         long tiempoLimiteTicks = (long)(duracionEnsayo.TotalSeconds * Stopwatch.Frequency);
         MensajesEnviados = new List<MensajeEnviado>[numHilos];
 
-        Parallel.For(0, numHilos, hiloIndex =>
+        Parallel.For(0, numHilos, (hiloIndex, loopState) =>
         {
             MQQueue queueActual = _outputQueues[hiloIndex % _outputQueues.Length]!;
             long horaInicio = Stopwatch.GetTimestamp();
             long horaFin = horaInicio + tiempoLimiteTicks;
             MensajesEnviados[hiloIndex] = new List<MensajeEnviado>();
 
-            while (Stopwatch.GetTimestamp() < horaFin)
+            while (!loopState.ShouldExitCurrentIteration && Stopwatch.GetTimestamp() < horaFin)
             {
-                //Thread.Sleep(14);
-                //DelayMicroseconds(9800);
+                DelayMicroseconds(delayMicroseconds);
                 
                 // Incrementar contador de forma thread-safe y obtener valor entre 1 y 164
                 int valorSegmento = (Interlocked.Increment(ref _contadorSegmento) - 1) % MAX_SEGMENTOS + 1;
                 string segmentoReemplazo = $"D{valorSegmento:D5}  "; // 8 caracteres: "D" + 5 dígitos + 2 espacios
                 string mensajeConSegmento = _mensaje.Replace("%XXXXXX%", segmentoReemplazo);
-                
-                (DateTime putDateTime, byte[] messageId) = IbmMQPlugin.EnviarMensaje(queueActual, mensajeConSegmento);
+                //System.Console.WriteLine(mensajeConSegmento);    //!!!!
+
+                DateTime putDateTime = default;
+                byte[] messageId = null!;
+                try
+                {
+                    (putDateTime, messageId) = IbmMQPlugin.EnviarMensaje(queueActual, mensajeConSegmento);
+                }
+                catch (MQException mqe) when (mqe.ReasonCode == MQC.MQRC_Q_FULL)
+                {
+                    Console.WriteLine($"Cola llena detectada. Deteniendo todos los hilos...");
+                    loopState.Stop(); // Detiene todos los hilos
+                    colaLlena = true;
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error en hilo {hiloIndex} al enviar mensaje: {ex.Message}");
+                    continue;
+                }
                 
                 MensajeEnviado mensajeEnviado = new(messageId, putDateTime);
                 MensajesEnviados[hiloIndex].Add(mensajeEnviado);
-                
                 Interlocked.Increment(ref messageCounter);
             }
 
             double elapsedMs = (Stopwatch.GetTimestamp() - horaInicio) * 1000.0 / Stopwatch.Frequency;
             Console.WriteLine($"Hilo {hiloIndex} tardó {elapsedMs:F2} ms");
         });
-
-        return messageCounter;
+        
+        return (messageCounter, colaLlena);
     }
 
 

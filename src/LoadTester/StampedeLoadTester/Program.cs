@@ -10,17 +10,26 @@ using System.Threading;
 using LoadTester.Plugins;
 using MathNet.Numerics.Statistics;
 using StampedeLoadTester.Models;
+using Tresvi.CommandParser.Attributtes.Keywords;
 
 namespace StampedeLoadTester
 {
     //dotnet run -- -f "xxx" -s "192.168.0.31, 192.168.0.24" -p 8888 -c -m "192.168.0.31:1414:CHANNEL1:MQGD" -d 2 -i "BNA.XX1.RESPUESTA" -o "BNA.XX1.PEDIDO"
     //dotnet run -- -f "xxx" -c -m "10.6.248.10:1414:CHANNEL1:MQGD" -d 2 -i "BNA.CU1.RESPUESTA" -o "BNA.CU1.PEDIDO"
     //dotnet run -- -f "xxx" -c -m "10.6.248.10:1414:CHANNEL1:MQGD" -d 2 -i "BNA.CU2.RESPUESTA" -o "BNA.CU2.PEDIDO"
+    //TODO: Cuando se alcanza a ver la cola de msjes de Respuesta vacios, dejar de intentar recuperar las respuestas, porque todos van a dar MQRC_NO_MSG_AVAILABLE eternamente
+    //TODO: Hacer que el ensayo se detenga por cola llena y continue con el siguiente punto
+    //TODO: Evaluar si la funcion ClearQueue es necesaria, ya que siempre deberia vaciarlas
+    //TODO: Implementar lectura de trxs desde archivos.
+    //TODO: Implementar salida de trxs a archivos
+    //TODO: Hacer algun programa de analisis de resultados
     internal class Program
     {
         //const string MENSAJE = "    00000008500000020251118115559N0001   000000PC  01100500000000000000                        00307384";
-        const string MENSAJE = "    00000008500000020251118114435G00111  000000DGPC011005590074200180963317";
-        //const string MENSAJE_CON_USUARIO_Y_SUCURSAL = "    00000777700000020251118114435%XXXXXX%000000DGPC011005590074200180963317";
+        //const string MENSAJE = "    00000008500000020251118114435G00111  000000DGPC011005590074200180963317";
+
+        const string MENSAJE = "    00000777700000020251118114435%XXXXXX%000000  BD011005590074200180963317";
+        
         /// <summary>
         /// Crea una lista de Hashtables con las propiedades de conexión MQ basadas en MqConnectionParams
         /// Genera 3 entradas (para soportar hasta 4 hilos de conexión en TestManager)
@@ -50,11 +59,21 @@ namespace StampedeLoadTester
             };
         }
 
+
         static async Task Main(string[] args)
         {
-            //var testDefinition = JsonSerializer.Deserialize<TestDefinition>(File.ReadAllText("test-definition.json"));  
-            object verb = CommandLine.Parse(args, typeof(MasterVerb), typeof(SlaveVerb));
 
+            object verb;
+            try 
+            {
+                verb = CommandLine.Parse(args, typeof(MasterVerb), typeof(SlaveVerb));
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"ERROR validando parametros de entrada: {ex}");
+                return;
+            }
+            
             if (verb is MasterVerb masterVerb)
             {
                 await RunAsMaster(masterVerb);
@@ -65,7 +84,8 @@ namespace StampedeLoadTester
             }
             else
             {
-                Console.WriteLine("Verbo no reconocido. Se opera normalmente...");
+                Console.Error.WriteLine($"ERROR: Verbo no implementado");
+                return;
             }
         }
 
@@ -83,6 +103,15 @@ namespace StampedeLoadTester
 
             try
             {
+                if (masterVerb.Duration < 0)
+                    throw new Exception($"La duracion del ensayo no puede ser negativa. Valor: ({masterVerb.Duration})");
+
+                if (masterVerb.RateLimitDelay < 0)
+                    throw new Exception($"El delay de lastre no puede ser negativo. Valor: ({masterVerb.RateLimitDelay})");
+
+                if (masterVerb.ThreadNumber > Environment.ProcessorCount)
+                    throw new Exception($"El nro de hilos ({masterVerb.ThreadNumber}) no puede ser mayor al nro de CPUs ({Environment.ProcessorCount})");
+                
                 ipSlaves = masterVerb.GetSlaves();
                 mqConnParams.LoadMqConnectionParams(masterVerb.MqConnection, masterVerb.OutputQueue, masterVerb.InputQueue);
             }
@@ -153,7 +182,8 @@ namespace StampedeLoadTester
             Console.ForegroundColor = ConsoleColor.Green;
             int numHilos = masterVerb.ThreadNumber;
             Console.WriteLine($"{DateTime.Now:HH:mm:ss.ff} - Ejecutando test de carga en el master a {numHilos} hilos, aguarde {masterVerb.Duration} segundos...");
-            int nroMensajesColocados = ExecuteWriteQueueTest(testManager, numHilos, masterVerb.Duration * 1000);
+            (int nroMensajesColocados, bool colaLlena) = ExecuteWriteQueueTest(testManager, numHilos, masterVerb.Duration * 1000, masterVerb.RateLimitDelay);
+            if (colaLlena) Console.WriteLine($"Se alcanzó la capacidad de la cola de entrada. Se detiene la inyección de mensajes");
             Console.ResetColor();
 
             // Detener el monitoreo inmediatamente después del test (antes de obtener resultados de slaves)
@@ -197,6 +227,7 @@ namespace StampedeLoadTester
             */
         }
 
+
         private static void RunAsSlave(SlaveVerb slaveVerb)
         {
             Console.WriteLine($"Iniciando en modo esclavo, escuchando en puerto {slaveVerb.Port}...");
@@ -204,6 +235,9 @@ namespace StampedeLoadTester
             MqConnectionParams mqConnectionParams = new();
             try
             {
+                if (slaveVerb.RateLimitDelay < 0)
+                    throw new Exception($"El delay de lastre no puede ser negativo. Valor: ({slaveVerb.RateLimitDelay})");
+                
                 mqConnectionParams.LoadMqConnectionParams(slaveVerb.MqConnection, slaveVerb.OutputQueue, slaveVerb.InputQueue);
             }
             catch (Exception ex)
@@ -376,10 +410,10 @@ namespace StampedeLoadTester
         }
 
 
-        private static int ExecuteWriteQueueTest(TestManager manager, int numHilos, int durationMs)
+        private static (int messageCounter, bool colaLlena) ExecuteWriteQueueTest(TestManager manager, int numHilos, int durationMs, int delayMicroseconds)
         {
             TimeSpan duracionEnsayo = TimeSpan.FromMilliseconds(durationMs);
-            return manager.EjecutarWriteQueueLoadTest(duracionEnsayo, numHilos);
+            return manager.EjecutarWriteQueueLoadTest(duracionEnsayo, numHilos, delayMicroseconds);
         }
 
 

@@ -25,7 +25,7 @@ namespace StampedeLoadTester.Models
             if (string.IsNullOrWhiteSpace(mqConnectionString))
                 throw new ArgumentException("El parámetro mqConnection no puede estar vacío.");
 
-            string[] partes = mqConnectionString.Split(':');
+            string[] partes = mqConnectionString.Split(';');
             
             if (partes.Length != 4)
             {

@@ -1,11 +1,10 @@
 ﻿using IBM.WMQ;
-using System.Text;
+using MainframeSimulator.Models;
 using System.Collections;
+using System.Runtime;
+using System.Text;
 using Tresvi.CommandParser;
-using MainframeSimulator.Options;
 using Tresvi.CommandParser.Exceptions;
-using System.Globalization;
-using System.Diagnostics;
 
 namespace MainframeSimulator
 {
@@ -15,8 +14,8 @@ namespace MainframeSimulator
 
     /// <summary>
     /// Ejemplo de ejecución:
-    /// dotnet run -- -s "192.168.0.31" -m "MQGD" -p 1414 -c "CHANNEL1" -i "BNA.XX1.PEDIDO" -o "BNA.XX1.RESPUESTA"
-    /// dotnet run -- -s "10.6.248.10" -m "MQGD" -p 1414 -c "CHANNEL1" -i "BNA.XX1.PEDIDO" -o "BNA.XX1.RESPUESTA"
+    /// dotnet run -- -m "192.168.0.31;1414;CHANNEL1;MQGD" -i "BNA.CU2.PEDIDO" -o "BNA.CU2.RESPUESTA"
+    /// dotnet run -- -m "10.6.248.10;1414;CHANNEL1;MQGD" -i "BNA.CU2.PEDIDO" -o "BNA.CU2.RESPUESTA"
     /// agregar "-q" para modo silencioso
     /// </summary>
     internal class Program
@@ -27,9 +26,12 @@ namespace MainframeSimulator
 
         static async Task Main(string[] args)
         {
+            // Configurar GC para mejor rendimiento en aplicaciones de alto throughput
+            GCSettings.LatencyMode = GCLatencyMode.SustainedLowLatency;
+            
             try
             {
-                Parameters options = CommandLine.Parse<Parameters>(args);
+                CliParameters options = CommandLine.Parse<CliParameters>(args);
                 ExecutionMode executionMode;
 
                 if (options.InputQueue?.ToUpper() == options.OutputQueue?.ToUpper())
@@ -48,9 +50,12 @@ namespace MainframeSimulator
                     return;
                 }
 
-                Console.WriteLine($"Connecting to MQ Server: {options.Server}:{options.Port}");
-                Console.WriteLine($"Manager: {options.Manager}, Channel: {options.Channel}");
+                MQConnection mqConnection = new();
+                mqConnection.Load(options.MqConnection);
+
+                Console.WriteLine($"Connecting to MQ Instance: {options.MqConnection}");
                 Console.WriteLine($"Input Queue: {options.InputQueue}");
+                
                 if (executionMode == ExecutionMode.flush)
                 {
                     Console.ForegroundColor = ConsoleColor.Yellow;
@@ -67,14 +72,14 @@ namespace MainframeSimulator
 
                 Hashtable connectionProperties = new()
                 {
-                    { MQC.HOST_NAME_PROPERTY, options.Server },
-                    { MQC.PORT_PROPERTY, options.Port },
-                    { MQC.CHANNEL_PROPERTY, options.Channel },
+                    { MQC.HOST_NAME_PROPERTY, mqConnection.Ip },
+                    { MQC.PORT_PROPERTY, mqConnection.Port },
+                    { MQC.CHANNEL_PROPERTY, mqConnection.Channel },
                     //{ MQC.TRANSPORT_PROPERTY, MQC.TRANSPORT_MQSERIES_CLIENT }
                 };
 
                 // Conectar al MQ Manager
-                MQQueueManager queueManager = new MQQueueManager(options.Manager, connectionProperties);
+                MQQueueManager queueManager = new MQQueueManager(mqConnection.ManagerName, connectionProperties);
                 Console.WriteLine("Connected to MQ Manager successfully");
 
                 // Validar que las colas existen y son accesibles antes de iniciar los hilos de trabajo
@@ -106,7 +111,7 @@ namespace MainframeSimulator
                         options.InputQueue!,
                         options.OutputQueue!,
                         options.Delay,
-                        options.Quiet,
+                        options.Verbose,
                         executionMode,
                         threadId,
                         cts.Token)));
@@ -157,7 +162,7 @@ namespace MainframeSimulator
             string inputQueueName,
             string outputQueueName,
             int delayMs,
-            bool quiet,
+            bool verbose,
             ExecutionMode executionMode,
             int threadId,
             CancellationToken cancellationToken)
@@ -204,7 +209,7 @@ namespace MainframeSimulator
                         string messageText = message.ReadString(message.MessageLength);
                         Interlocked.Increment(ref _totalRequests);
 
-                        if (!quiet)
+                        if (verbose)
                         {
                             string preview = messageText.Length > 50 ? messageText.Substring(0, 50) + "..." : messageText;
                             Console.WriteLine($"[Thread {threadId}] Received message: {preview} {message.PutDateTime:HH:mm:ss.ff}");
@@ -220,14 +225,20 @@ namespace MainframeSimulator
                                 await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
                         }
 
-                        // Construir respuesta de forma más eficiente
+                        // Construir respuesta de forma más eficiente con EnsureCapacity
+                        //TODO: Aun asi, tanto movimiento de strings, causa deasiadas ejecuciones del GC, lo que causa qe las respuestas se hagan de a "rafagas".
+                        // Eso quedo demostrado, al responder un string hardcodeado, lo que permitio tasas de respuesta muy constantes y sin cortes.
+                        int estimatedCapacity = ECO_PREFIX.Length + messageText.Length;
                         responseBuilder.Clear();
+                        responseBuilder.EnsureCapacity(estimatedCapacity);
                         responseBuilder.Append(ECO_PREFIX);
                         responseBuilder.Append(messageText);
                         string responseText = responseBuilder.ToString();
                         
                         var responseMessage = new MQMessage
                         {
+                            Format = MQC.MQFMT_STRING,
+                            //CharacterSet = 500,
                             MessageId = MQC.MQMI_NONE,
                             CorrelationId = messageId
                         };
@@ -236,7 +247,7 @@ namespace MainframeSimulator
                         outputQueue?.Put(responseMessage, putMessageOptions);
                         Interlocked.Increment(ref _totalResponses);
                         
-                        if (!quiet)
+                        if (verbose)
                         {
                             string responsePreview = responseText.Length > 50 ? responseText.Substring(0, 50) + "..." : responseText;
                             Console.WriteLine($"[Thread {threadId}] Sent response: {responsePreview} {responseMessage.PutDateTime:HH:mm:ss.ff}");
