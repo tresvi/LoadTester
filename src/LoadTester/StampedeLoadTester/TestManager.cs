@@ -146,13 +146,13 @@ internal sealed class TestManager : IDisposable
             while (Stopwatch.GetTimestamp() < horaFin)
             {
                 //Thread.Sleep(14);
-                //DelayMicroseconds(9800);
+                DelayMicroseconds(5000);
                 
                 // Incrementar contador de forma thread-safe y obtener valor entre 1 y 164
                 int valorSegmento = (Interlocked.Increment(ref _contadorSegmento) - 1) % MAX_SEGMENTOS + 1;
                 string segmentoReemplazo = $"D{valorSegmento:D5}  "; // 8 caracteres: "D" + 5 dígitos + 2 espacios
                 string mensajeConSegmento = _mensaje.Replace("%XXXXXX%", segmentoReemplazo);
-                
+                //System.Console.WriteLine(mensajeConSegmento);    //!!!!
                 (DateTime putDateTime, byte[] messageId) = IbmMQPlugin.EnviarMensaje(queueActual, mensajeConSegmento);
                 
                 MensajeEnviado mensajeEnviado = new(messageId, putDateTime);

@@ -261,21 +261,28 @@ namespace LoadTester.Plugins
 
             var msg = new MQMessage
             {
-                //CharacterSet = 1208,
-                //Format = MQC.MQFMT_STRING,
-                //MessageId = MQC.MQMI_NONE,
+                //Comentar las primeras 3 propiedades si no quiero recuperar los msjes
+                CharacterSet = 1208,
+                Format = MQC.MQFMT_STRING,
+                MessageId = MQC.MQMI_NONE,
                 CorrelationId = correlationId
             };
 
             var gmo = new MQGetMessageOptions
             {
-                //Options = MQC.MQGMO_WAIT | MQC.MQGMO_CONVERT,
-                Options = MQC.MQGMO_WAIT | MQC.MQGMO_NO_SYNCPOINT | MQC.MQGMO_FAIL_IF_QUIESCING,
-                WaitInterval = 1000,
+                //Esta option sin el convert es si no queremos leer el msje
+                //Options = MQC.MQGMO_WAIT | MQC.MQGMO_NO_SYNCPOINT | MQC.MQGMO_FAIL_IF_QUIESCING
+                Options = MQC.MQGMO_WAIT | MQC.MQGMO_NO_SYNCPOINT | MQC.MQGMO_FAIL_IF_QUIESCING | MQC.MQGMO_CONVERT,
+                WaitInterval = 500,
                 MatchOptions = MQC.MQMO_MATCH_CORREL_ID
             };
 
             queue.Get(msg, gmo);
+            /*
+            // Leer y imprimir el contenido de la respuesta
+            string contenido = msg.ReadString(msg.MessageLength);
+            Console.WriteLine($"Respuesta: {contenido}");
+            */
             
             // Devolver el PutDateTime del mensaje recibido
             return msg.PutDateTime;
