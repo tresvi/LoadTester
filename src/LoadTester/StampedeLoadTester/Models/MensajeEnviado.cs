@@ -13,9 +13,6 @@ namespace StampedeLoadTester.Models
         /// </summary>
         private static int _orderingCounter = 0;
 
-        /// <summary>
-        /// MessageId del mensaje (24 bytes)
-        /// </summary>
         public byte[] MessageId;
 
         /// <summary>
@@ -43,21 +40,15 @@ namespace StampedeLoadTester.Models
             }
         }
 
-        /// <summary>
-        /// Fecha y hora en que el mensaje fue recibido en la cola de entrada (por ahora vacío)
-        /// </summary>
         public DateTime ResponsePutDateTime;
-
+    
         public MensajeEnviado(byte[] messageId, DateTime requestPutDateTime)
         {
-            MessageId = new byte[24];
-            if (messageId != null && messageId.Length >= 24)
-            {
-                Array.Copy(messageId, MessageId, 24);
-            }
-            RequestPutDateTime = default;
+            MessageId = messageId;
+            RequestPutDateTime = requestPutDateTime;
             ResponsePutDateTime = default;
         }
+        
     }
 }
 

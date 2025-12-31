@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using IBM.WMQ;
 using LoadTester.Plugins;
+using StampedeLoadTester.Models;
 
 namespace StampedeLoadTester;
 
@@ -12,51 +13,6 @@ namespace StampedeLoadTester;
 internal sealed class TestManager : IDisposable
 {
 
-    
-    internal struct MensajeEnviado
-    {
-        /// <summary>
-        /// Contador estático y thread-safe para asignar el orden secuencial
-        /// </summary>
-        private static int _orderingCounter = 0;
-
-        public byte[] MessageId;
-
-        /// <summary>
-        /// Orden secuencial en que fue enviado el mensaje (asignado automáticamente)
-        /// </summary>
-        public int Ordering { get; private set; }
-
-        private DateTime _requestPutDateTime;
-
-        /// <summary>
-        /// Fecha y hora en que el mensaje fue colocado en la cola de salida.
-        /// Al asignarse, automáticamente se asigna un valor secuencial a Ordering.
-        /// </summary>
-        public DateTime RequestPutDateTime
-        {
-            get => _requestPutDateTime;
-            set
-            {
-                _requestPutDateTime = value;
-                // Asignar orden secuencial thread-safe solo si aún no se ha asignado
-                if (Ordering == 0)
-                {
-                    Ordering = Interlocked.Increment(ref _orderingCounter);
-                }
-            }
-        }
-
-        public DateTime ResponsePutDateTime;
-    
-        public MensajeEnviado(byte[] messageId, DateTime requestPutDateTime)
-        {
-            MessageId = messageId;
-            RequestPutDateTime = requestPutDateTime;
-            ResponsePutDateTime = default;
-        }
-        
-    }
 
     public List<MensajeEnviado>[]? MensajesEnviados {get; private set;}
 
@@ -344,48 +300,41 @@ internal sealed class TestManager : IDisposable
     /// <summary>
     /// Recibe mensajes de la cola de entrada usando los MessageId como CorrelationId y actualiza el campo ResponsePutDateTime
     /// </summary>
-    /// <param name="mensajesEnviados">Array de listas de mensajes enviados, donde cada índice corresponde a un hilo</param>
+    /// <param name="mensajesEnviados">Lista unificada de mensajes enviados, ordenada por RequestPutDateTime</param>
     /// <param name="inputQueueName">Nombre de la cola de entrada de donde se recibirán los mensajes</param>
-    public void RecibirRespuestasYActualizarPutDateTime(List<MensajeEnviado>[] mensajesEnviados, string inputQueueName)
+    public void RecibirRespuestasYActualizarPutDateTime(List<MensajeEnviado> mensajesEnviados, string inputQueueName)
     {
         ArgumentNullException.ThrowIfNull(mensajesEnviados, nameof(mensajesEnviados));
         if (_queueManagers[0] is null) throw new InvalidOperationException("Las conexiones no están inicializadas");
 
-        // Abrir cola de entrada una vez para todos los hilos
+        // Abrir cola de entrada una vez
         MQQueue? inputQueue = null;
         try
         {
             inputQueue = IbmMQPlugin.OpenInputQueue(_queueManagers[0]!, inputQueueName);
 
-            // Recorrer índice por índice (cada índice = un hilo)
-            for (int hiloIndex = 0; hiloIndex < mensajesEnviados.Length; hiloIndex++)
+            // Recorrer la lista de mensajes
+            for (int i = 0; i < mensajesEnviados.Count; i++)
             {
-                var listaMensajes = mensajesEnviados[hiloIndex];
+                var mensajeEnviado = mensajesEnviados[i];
                 
-                if (listaMensajes == null || listaMensajes.Count == 0) continue;
-
-                for (int i = 0; i < listaMensajes.Count; i++)
+                // Si el MessageId es null o no tiene 24 bytes, saltar este mensaje
+                if (mensajeEnviado.MessageId == null || mensajeEnviado.MessageId.Length != 24)
                 {
-                    var mensajeEnviado = listaMensajes[i];
-                    
-                    // Si el MessageId es null o no tiene 24 bytes, saltar este mensaje
-                    if (mensajeEnviado.MessageId == null || mensajeEnviado.MessageId.Length != 24)
-                    {
-                        Console.WriteLine($"Advertencia: Hilo {hiloIndex}, mensaje {i} tiene MessageId inválido. Saltando...");
-                        continue;
-                    }
+                    Console.WriteLine($"Advertencia: Mensaje {i} tiene MessageId inválido. Saltando...");
+                    continue;
+                }
 
-                    try
-                    {
-                        // Hacer GET usando el MessageId como CorrelationId
-                        DateTime putDateTime = IbmMQPlugin.RecibirMensajeYObtenerPutDateTime(inputQueue, mensajeEnviado.MessageId);
-                        mensajeEnviado.ResponsePutDateTime = putDateTime;
-                        listaMensajes[i] = mensajeEnviado;
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Error al recibir mensaje para Hilo {hiloIndex}, mensaje {i}: {ex.Message}");
-                    }
+                try
+                {
+                    // Hacer GET usando el MessageId como CorrelationId
+                    DateTime putDateTime = IbmMQPlugin.RecibirMensajeYObtenerPutDateTime(inputQueue, mensajeEnviado.MessageId);
+                    mensajeEnviado.ResponsePutDateTime = putDateTime;
+                    mensajesEnviados[i] = mensajeEnviado;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error al recibir mensaje {i}: {ex.Message}");
                 }
             }
         }

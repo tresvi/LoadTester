@@ -2,7 +2,7 @@
   "profiles": {
     "StampedeLoadTester": {
       "commandName": "Project",
-      "commandLineArgs": "-f \"c:\\\\Temp\" -s \"192.168.0.31,192.168.0.24\" -p 8888 -c "
+      "commandLineArgs": " -f \"xxx\"  -m \"192.168.0.31;1414;CHANNEL1;MQGD\" -d 2 -i \"BNA.CU2.RESPUESTA\" -o \"BNA.CU2.PEDIDO\""
     }
   }
 }

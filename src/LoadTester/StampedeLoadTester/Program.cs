@@ -208,9 +208,18 @@ namespace StampedeLoadTester
             PrintQueueStatistics(medicionesProfundidad);
             
             Console.WriteLine($"Recibiendo respuestas y actualizando put date time...");
-            testManager.RecibirRespuestasYActualizarPutDateTime(testManager.MensajesEnviados!, mqConnParams.InputQueue);
+
+            // Juntar todas las listas en una sola y ordenarla por RequestPutDateTime, para maximizar la probabilidad de obtener 
+            //las respuestas en orden y evitar lo mas posible que se venza la respuesta en la cola de respuestas dando un MQRC_NO_MSG_AVAILABLE
+            List<MensajeEnviado> mensajesEnviadosOrdenados = testManager.MensajesEnviados!
+                .Where(lista => lista != null)
+                .SelectMany(lista => lista)
+                .OrderBy(m => m.RequestPutDateTime)
+                .ToList();
+
+            testManager.RecibirRespuestasYActualizarPutDateTime(mensajesEnviadosOrdenados, mqConnParams.InputQueue);
             
-            PrintMessagesResults2(testManager.MensajesEnviados);
+            PrintMessagesResults2(mensajesEnviadosOrdenados);
 
             //Sincronizar relojes de los esclavos
             /*
@@ -252,13 +261,13 @@ namespace StampedeLoadTester
         }
 
 
-    /// <summary>
-    /// Recorre todas las IPs de los esclavos y espera a que respondan a un ping
-    /// </summary>
-    /// <param name="remoteController"></param>
-    /// <param name="ipSlaves"></param>
-    /// <param name="slavePort"></param>
-    /// <param name="slaveTimeout"></param>
+        /// <summary>
+        /// Recorre todas las IPs de los esclavos y espera a que respondan a un ping
+        /// </summary>
+        /// <param name="remoteController"></param>
+        /// <param name="ipSlaves"></param>
+        /// <param name="slavePort"></param>
+        /// <param name="slaveTimeout"></param>
         private static bool WaitForSlavesPing(RemoteControllerService remoteController, IReadOnlyList<IPAddress> ipSlaves, int slavePort, int slaveTimeout)
         {   
             bool allSlavesResponded = true;
@@ -280,6 +289,7 @@ namespace StampedeLoadTester
 
             return allSlavesResponded;
         }
+
 
         /// <summary>
         /// Inicializa las conexiones MQ en todos los esclavos remotos
@@ -437,9 +447,9 @@ namespace StampedeLoadTester
         }
 
 
-        private static void PrintMessagesResults2(List<TestManager.MensajeEnviado>[]? mensajesEnviados)
+        private static void PrintMessagesResults2(List<MensajeEnviado>? mensajesEnviados)
         {
-            if (mensajesEnviados == null)
+            if (mensajesEnviados == null || mensajesEnviados.Count == 0)
             {
                 Console.WriteLine("No hay mensajes para imprimir.");
                 return;
@@ -448,52 +458,30 @@ namespace StampedeLoadTester
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine("\n================== ESTADÍSTICAS DE LATENCIA ==================");
             
-            // Recolectar todas las diferencias válidas y encontrar tiempos primero/último
-            List<double> diferenciasMs = [];
-            int totalMensajes = 0;
-            int mensajesConRespuesta = 0;
-            int mensajesSinRespuesta = 0;
-            DateTime? primerMensaje = null;
-            DateTime? ultimoMensaje = null;
-
-            for (int hiloIndex = 0; hiloIndex < mensajesEnviados.Length; hiloIndex++)
-            {
-                var listaMensajes = mensajesEnviados[hiloIndex];
-                
-                if (listaMensajes == null || listaMensajes.Count == 0)
-                    continue;
-
-                foreach (var mensaje in listaMensajes)
-                {
-                    totalMensajes++;
-                    
-                    // Trackear primer y último mensaje para calcular throughput
-                    if (!primerMensaje.HasValue || mensaje.RequestPutDateTime < primerMensaje.Value)
-                        primerMensaje = mensaje.RequestPutDateTime;
-                    if (!ultimoMensaje.HasValue || mensaje.RequestPutDateTime > ultimoMensaje.Value)
-                        ultimoMensaje = mensaje.RequestPutDateTime;
-                    
-                    if (mensaje.ResponsePutDateTime == default(DateTime))
-                    {
-                        mensajesSinRespuesta++;
-                    }
-                    else
-                    {
-                        mensajesConRespuesta++;
-                        double diferencia = (mensaje.ResponsePutDateTime - mensaje.RequestPutDateTime).TotalMilliseconds;
-                        diferenciasMs.Add(diferencia);
-                    }
-                }
-            }
+            // Calcular métricas usando LINQ
+            int totalMensajes = mensajesEnviados.Count;
+            var mensajesConRespuestaList = mensajesEnviados
+                .Where(m => m.ResponsePutDateTime != default(DateTime))
+                .ToList();
+            
+            int mensajesConRespuesta = mensajesConRespuestaList.Count;
+            int mensajesSinRespuesta = totalMensajes - mensajesConRespuesta;
+            
+            var diferenciasMs = mensajesConRespuestaList
+                .Select(m => (m.ResponsePutDateTime - m.RequestPutDateTime).TotalMilliseconds)
+                .ToList();
+            
+            DateTime horaPrimerMensaje = mensajesEnviados.Min(m => m.RequestPutDateTime);
+            DateTime horaUltimoMensaje = mensajesEnviados.Max(m => m.RequestPutDateTime);
 
             Console.WriteLine($"Total de mensajes enviados: {totalMensajes}");
             Console.WriteLine($"Mensajes con respuesta: {mensajesConRespuesta}");
             Console.WriteLine($"Mensajes sin respuesta: {mensajesSinRespuesta}");
             
             // Calcular throughput (mensajes por segundo)
-            if (primerMensaje.HasValue && ultimoMensaje.HasValue && totalMensajes > 0)
+            if (totalMensajes > 0)
             {
-                double tiempoTotalSegundos = (ultimoMensaje.Value - primerMensaje.Value).TotalSeconds;
+                double tiempoTotalSegundos = (horaUltimoMensaje - horaPrimerMensaje).TotalSeconds;
                 if (tiempoTotalSegundos > 0)
                 {
                     double throughput = totalMensajes / tiempoTotalSegundos;
