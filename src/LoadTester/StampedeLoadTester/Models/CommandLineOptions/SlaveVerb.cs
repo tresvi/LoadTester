@@ -24,5 +24,8 @@ internal class SlaveVerb
     [Option("OutputQueue", 'o', true, "Cola de salida para enviar los mensajes.")]
     public string OutputQueue { get; set;} = "";
 
+    [Option("rateLimitDelay", 'r', false, "Delay intencional en microsegundos entre cada mensaje enviado. Actúa como lastre para controlar la tasa de envío y ralentizar la ejecución. Default: 0 (sin delay)")]
+    public int RateLimitDelay {get; set;} = 0;
+
 }
 

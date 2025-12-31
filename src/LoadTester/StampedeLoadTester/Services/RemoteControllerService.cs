@@ -162,7 +162,9 @@ namespace StampedeLoadTester.Services;
                         
                         /*************************************************/
                         TimeSpan duracionEnsayo = TimeSpan.FromMilliseconds(2000);
-                        int messageCounter = manager.EjecutarWriteQueueLoadTest(duracionEnsayo, 6);
+                        (int messageCounter, bool colaLlena) = manager.EjecutarWriteQueueLoadTest(duracionEnsayo, 6, 0); // delayMicroseconds = 0 por defecto para slaves
+                        
+                        if (colaLlena) Console.WriteLine($"Cola llena detectada. Deteniendo todos los hilos...");
                         Console.WriteLine($"FIN: Msjes colocados: {messageCounter}");
                         
                         // Guardar el messageCounter para consultas posteriores

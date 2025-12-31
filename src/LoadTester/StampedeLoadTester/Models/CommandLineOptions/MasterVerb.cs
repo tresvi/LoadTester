@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System;
+using System.Net;
 using Tresvi.CommandParser.Attributtes.Keywords;
 
 namespace StampedeLoadTester.Models.CommandLineOptions;
@@ -12,7 +13,7 @@ public class MasterVerb
     [Option("file", 'f', true, "Archivo con la descripcion del ensayo a realizar")]
     public string? File { get; set; }
 
-    [Option("slaves", 's', false, "Lista de IPs de los esclavos separados por coma (1.1.1.1, 2.2.2.2, 3.3.3.3)")]
+    [Option("slaves", 's', false, "Lista de IPs de los esclavos separados por punto y coma (1.1.1.1;2.2.2.2;3.3.3.3)")]
     public string Slaves { get; set; } = "";
 
     [Option("slavePort", 'p', false, "Puerto donde escucharán los esclavos. Todos los esclavos deberán usar el mismo. Default: " + SLAVE_PORT_DEFAULT )]
@@ -27,11 +28,11 @@ public class MasterVerb
     [Flag("clearQ", 'c', "Limpia la cola de salida antes de ejecutar el test de carga")]
     public bool ClearQueue { get; set; } = false;
 
-    [Option("mqConnection", 'm', true, "Cadena que representa los parametros de conexion al servidor MQ conla siguiente estructura: MQServerIp:Port:Channel:ManagerName. Ej: 192.168.0.31:1414:CHANNEL1:MQGD ")]
+    [Option("mqConnection", 'm', true, "Cadena que representa los parametros de conexion al servidor MQ con la siguiente estructura: MQServerIp:Port:Channel:ManagerName. Ej: 192.168.0.31;1414;CHANNEL1;MQGD ")]
     public string MqConnection { get; set; } = "";
 
     [Option("duration", 'd', true, "Duracion de prueba en segundos.")]
-    public int Duration { get; set;}
+    public int Duration {get; set;}
 
     [Option("IputQueue", 'i', true, "Cola de entrada para recibir los mensajes.")]
     public string InputQueue { get; set;} = "";
@@ -39,12 +40,15 @@ public class MasterVerb
     [Option("OutputQueue", 'o', true, "Cola de salida para enviar los mensajes.")]
     public string OutputQueue { get; set;} = "";
 
+    [Option("rateLimitDelay", 'r', false, "Delay intencional en microsegundos entre cada mensaje enviado. Actúa como lastre para controlar la tasa de envío y ralentizar la ejecución. Default: 0 (sin delay)")]
+    public int RateLimitDelay {get; set;} = 0;
+
     internal IReadOnlyList<IPAddress> GetSlaves()
     {
         try
         {	
             if (string.IsNullOrEmpty(Slaves)) return Array.Empty<IPAddress>();
-            return Slaves.Split(',').Select(slave => IPAddress.Parse(slave.Trim())).ToList();
+            return Slaves.Split(';').Select(slave => IPAddress.Parse(slave.Trim())).ToList();
         }
         catch (Exception ex)
         {
