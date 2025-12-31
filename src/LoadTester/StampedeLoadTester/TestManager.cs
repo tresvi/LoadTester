@@ -146,7 +146,7 @@ internal sealed class TestManager : IDisposable
             while (Stopwatch.GetTimestamp() < horaFin)
             {
                 //Thread.Sleep(14);
-                DelayMicroseconds(5000);
+                //DelayMicroseconds(5000);
                 
                 // Incrementar contador de forma thread-safe y obtener valor entre 1 y 164
                 int valorSegmento = (Interlocked.Increment(ref _contadorSegmento) - 1) % MAX_SEGMENTOS + 1;
