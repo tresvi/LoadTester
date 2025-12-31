@@ -25,9 +25,6 @@ public class MasterVerb
     [Option("threadNumber", 't', false, "Número de hilos para el test de carga. Si se omite, se usará el nro de Threads de la CPU")]
     public int ThreadNumber { get; set; } = Environment.ProcessorCount;
     
-    [Flag("clearQ", 'c', "Limpia la cola de salida antes de ejecutar el test de carga")]
-    public bool ClearQueue { get; set; } = false;
-
     [Option("mqConnection", 'm', true, "Cadena que representa los parametros de conexion al servidor MQ con la siguiente estructura: MQServerIp:Port:Channel:ManagerName. Ej: 192.168.0.31;1414;CHANNEL1;MQGD ")]
     public string MqConnection { get; set; } = "";
 
