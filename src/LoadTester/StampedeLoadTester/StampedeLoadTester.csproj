@@ -46,7 +46,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="TestSamples\" />
+    <Folder Include="Files\InputFiles\" />
+    <Folder Include="Files\TestSamples\" />
   </ItemGroup>
 
 </Project>

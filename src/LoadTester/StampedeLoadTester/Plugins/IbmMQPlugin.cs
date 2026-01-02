@@ -273,7 +273,7 @@ namespace LoadTester.Plugins
                 //Esta option sin el convert es si no queremos leer el msje
                 //Options = MQC.MQGMO_WAIT | MQC.MQGMO_NO_SYNCPOINT | MQC.MQGMO_FAIL_IF_QUIESCING
                 Options = MQC.MQGMO_WAIT | MQC.MQGMO_NO_SYNCPOINT | MQC.MQGMO_FAIL_IF_QUIESCING | MQC.MQGMO_CONVERT,
-                WaitInterval = 50,
+                WaitInterval = 250,
                 MatchOptions = MQC.MQMO_MATCH_CORREL_ID
             };
 
