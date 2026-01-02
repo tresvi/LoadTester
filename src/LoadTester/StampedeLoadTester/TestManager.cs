@@ -22,9 +22,7 @@ internal sealed class TestManager : IDisposable
     private readonly List<Hashtable> _connectionProperties;
     private readonly MQQueueManager?[] _queueManagers = new MQQueueManager?[4];
     private readonly MQQueue?[] _outputQueues = new MQQueue?[4];
-    
-    private static int _contadorSegmento = 0;
-    private const int MAX_SEGMENTOS = 164;
+
 
     public TestManager(string queueManagerName, string outputQueueName, string mensaje, List<Hashtable> connectionProperties)
     {
@@ -105,10 +103,11 @@ internal sealed class TestManager : IDisposable
                 DelayMicroseconds(delayMicroseconds);
                 
                 // Incrementar contador de forma thread-safe y obtener valor entre 1 y 164
-                int valorSegmento = (Interlocked.Increment(ref _contadorSegmento) - 1) % MAX_SEGMENTOS + 1;
+                int valorSegmento = (Interlocked.Increment(ref _contadorTransaccion) - 1) % MAX_SEGMENTOS + 1;
                 string segmentoReemplazo = $"D{valorSegmento:D5}  "; // 8 caracteres: "D" + 5 dígitos + 2 espacios
                 string mensajeConSegmento = _mensaje.Replace("%XXXXXX%", segmentoReemplazo);
-                //System.Console.WriteLine(mensajeConSegmento);    //!!!!
+                //System.Console.WriteLine(mensajeConSegmento);    
+*/
 
                 DateTime putDateTime = default;
                 byte[] messageId = null!;
@@ -404,6 +403,14 @@ internal sealed class TestManager : IDisposable
                 throw;
             }
         }
+    }
+
+
+    private static int _indiceTransaccion = 0;
+    private string ObtenerMensaje(int indiceTransaccion)
+    {
+        int indice = (Interlocked.Increment(ref _indiceTransaccion) - 1) % 164 + 1;
+        return transacciones[indice];
     }
 
     public void Dispose()

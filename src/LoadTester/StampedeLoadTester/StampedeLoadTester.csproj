@@ -46,8 +46,16 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Files\InputFiles\" />
     <Folder Include="Files\TestSamples\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Files\InputFiles\trx_559_164_users.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Files\InputFiles\trx_559_1_user.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Net;
+using Tresvi.CommandParser.Attributes.Validation;
 using Tresvi.CommandParser.Attributtes.Keywords;
 
 namespace StampedeLoadTester.Models.CommandLineOptions;
@@ -10,7 +11,8 @@ public class MasterVerb
     private const int SLAVE_TIMEOUT_DEFAULT = 5;
     private const string SLAVE_PORT_DEFAULT = "8888";
 
-    [Option("file", 'f', true, "Archivo con la descripcion del ensayo a realizar")]
+    [FileExists()]
+    [Option("file", 'f', true, "Archivo con las transacciones a eviar")]
     public string? File { get; set; }
 
     [Option("slaves", 's', false, "Lista de IPs de los esclavos separados por punto y coma (1.1.1.1;2.2.2.2;3.3.3.3)")]

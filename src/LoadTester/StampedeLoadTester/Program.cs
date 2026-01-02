@@ -34,6 +34,11 @@ namespace StampedeLoadTester
         const int TIMEOUT_VACIADO_COLA_PEDIDO_MS = 10000;
 
         /// <summary>
+        /// Lista de líneas leídas del archivo especificado con el parámetro -f
+        /// </summary>
+        private static string[]? transacciones { get; set; }
+
+        /// <summary>
         /// Crea una lista de Hashtables con las propiedades de conexión MQ basadas en MqConnectionParams
         /// Genera 3 entradas (para soportar hasta 4 hilos de conexión en TestManager)
         /// </summary>
@@ -65,7 +70,6 @@ namespace StampedeLoadTester
 
         static async Task Main(string[] args)
         {
-
             object verb;
             try 
             {
@@ -115,6 +119,9 @@ namespace StampedeLoadTester
                 if (masterVerb.ThreadNumber > Environment.ProcessorCount)
                     throw new Exception($"El nro de hilos ({masterVerb.ThreadNumber}) no puede ser mayor al nro de CPUs ({Environment.ProcessorCount})");
                 
+                transacciones = File.ReadAllLines(masterVerb.File!);
+                Console.WriteLine($"Archivo cargado: {transacciones.Length} líneas leídas");
+                
                 ipSlaves = masterVerb.GetSlaves();
                 mqConnParams.LoadMqConnectionParams(masterVerb.MqConnection, masterVerb.OutputQueue, masterVerb.InputQueue);
             }
@@ -126,7 +133,7 @@ namespace StampedeLoadTester
 
             RemoteControllerService remoteController = new();
             List<Hashtable> connectionProperties = CreateConnectionProperties(mqConnParams);
-            using TestManager testManager = new(mqConnParams.MqManagerName, mqConnParams.OutputQueue, MENSAJE, connectionProperties);
+            using TestManager testManager = new(mqConnParams.MqManagerName, mqConnParams.OutputQueue, MENSAJE, connectionProperties, transacciones);
 
             CancellationTokenSource? monitorProfCts = null;
             Task<Dictionary<int, int>>? taskMonitor = null;
@@ -658,5 +665,22 @@ namespace StampedeLoadTester
             Console.ResetColor();
         }
  
+
+        private static void GenerarYMostrarVariantesMensaje()
+        {
+            
+            for (int i = 1; i <= 164; i++)
+            {
+                // Generar el reemplazo: "D" + 5 dígitos numéricos + 2 espacios
+                string reemplazo = $"D{i:D5}  "; // D5 formatea con 5 dígitos (ej: D00001, D00164)
+                
+                // Reemplazar %XXXXXX% con el segmento generado
+                string mensajeGenerado = MENSAJE.Replace("%XXXXXX%", reemplazo);
+                
+                // Imprimir por pantalla
+                Console.WriteLine(mensajeGenerado);
+            }
+        }
+
     }
 }
