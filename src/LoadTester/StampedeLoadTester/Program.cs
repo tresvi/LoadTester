@@ -23,6 +23,7 @@ namespace StampedeLoadTester
     //TODO: Implementar lectura de trxs desde archivos.
     //TODO: Implementar salida de trxs a archivos
     //TODO: Hacer algun programa de analisis de resultados
+    //TODO: CUando la cola de respuesta se llena, y aun queda contenido en la de pedido el programa se queda indefinidamente esperando a que se vacie para continuar con la recuperacion de mensajes. Ante esto, implementar un timeout, o bien, revisar que si ambas colas se quedan asi, se debe abortar (en el banco la limpiaria automaticamente Q server)
     internal class Program
     {
         //const string MENSAJE = "    00000008500000020251118115559N0001   000000PC  01100500000000000000                        00307384";
@@ -30,6 +31,8 @@ namespace StampedeLoadTester
 
         const string MENSAJE = "    00000777700000020251118114435%XXXXXX%000000  BD011005590074200180963317";
         
+        const int TIMEOUT_VACIADO_COLA_PEDIDO_MS = 10000;
+
         /// <summary>
         /// Crea una lista de Hashtables con las propiedades de conexión MQ basadas en MqConnectionParams
         /// Genera 3 entradas (para soportar hasta 4 hilos de conexión en TestManager)
@@ -200,12 +203,15 @@ namespace StampedeLoadTester
             List<(int? result, string ipSlave)> resultados = await GetSlavesResultsAsync(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
             PrintResults(resultados, nroMensajesColocados);
 
-            Console.Write($"\nEsperando a que se procesen todos los mensajes de la cola {mqConnParams.OutputQueue} ...");
-            List<(DateTime hora, int profundidad)> medicionesProfundidad = [];
-            testManager.WaitForQueueEmptied(mqConnParams.OutputQueue, measurements: out medicionesProfundidad);
-            Console.WriteLine($": OK");
-
-            PrintQueueStatistics(medicionesProfundidad);
+            Console.Write($"\nEsperando que se procesen todos los mensajes de la cola {mqConnParams.OutputQueue} ...");
+            List<(DateTime hora, int profundidad)> medicionesProfundColaPedido = [];
+            bool colaPedidoVaciada = testManager.WaitForQueueEmptied(mqConnParams.OutputQueue, out medicionesProfundColaPedido, TIMEOUT_VACIADO_COLA_PEDIDO_MS);
+            if (colaPedidoVaciada) 
+                Console.WriteLine($": OK");
+            else
+                Console.WriteLine($": NO . La cola de pedido no se vacio en el tiempo establecido. Se continua la ejecución");
+            
+            PrintQueueStatistics(medicionesProfundColaPedido);
             
             Console.WriteLine($"Recibiendo respuestas y actualizando put date time...");
 
@@ -485,7 +491,7 @@ namespace StampedeLoadTester
                 if (tiempoTotalSegundos > 0)
                 {
                     double throughput = totalMensajes / tiempoTotalSegundos;
-                    Console.WriteLine($"\n-------------------------- Throughput -------------------------");
+                    Console.WriteLine($"\n---------------- Throughput de Cola de Pedido -----------------");
                     Console.WriteLine($"Tiempo total de envío:   {tiempoTotalSegundos:F2} s");
                     Console.WriteLine($"Throughput:              {throughput:F2} mensajes/segundo");
                     
