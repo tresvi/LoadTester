@@ -22,14 +22,16 @@ internal sealed class TestManager : IDisposable
     private readonly List<Hashtable> _connectionProperties;
     private readonly MQQueueManager?[] _queueManagers = new MQQueueManager?[4];
     private readonly MQQueue?[] _outputQueues = new MQQueue?[4];
+    private readonly string[] _transacciones;
 
 
-    public TestManager(string queueManagerName, string outputQueueName, string mensaje, List<Hashtable> connectionProperties)
+    public TestManager(string queueManagerName, string outputQueueName, string mensaje, List<Hashtable> connectionProperties, ref string[] transacciones)
     {
         _queueManagerName = queueManagerName;
         _outputQueueName = outputQueueName;
         _mensaje = mensaje;
         _connectionProperties = connectionProperties;
+        _transacciones = transacciones;
         MensajesEnviados = null; // Se inicializará cuando se ejecute EjecutarWriteQueueLoadTest
     }
 
@@ -101,14 +103,16 @@ internal sealed class TestManager : IDisposable
             while (!loopState.ShouldExitCurrentIteration && Stopwatch.GetTimestamp() < horaFin)
             {
                 DelayMicroseconds(delayMicroseconds);
-                
+
+                /*
                 // Incrementar contador de forma thread-safe y obtener valor entre 1 y 164
                 int valorSegmento = (Interlocked.Increment(ref _contadorTransaccion) - 1) % MAX_SEGMENTOS + 1;
                 string segmentoReemplazo = $"D{valorSegmento:D5}  "; // 8 caracteres: "D" + 5 dígitos + 2 espacios
                 string mensajeConSegmento = _mensaje.Replace("%XXXXXX%", segmentoReemplazo);
                 //System.Console.WriteLine(mensajeConSegmento);    
 */
-
+                string mensajeConSegmento = _transacciones[ObtenerIndiceMensaje()];
+System.Console.WriteLine(mensajeConSegmento);
                 DateTime putDateTime = default;
                 byte[] messageId = null!;
                 try
@@ -407,11 +411,19 @@ internal sealed class TestManager : IDisposable
 
 
     private static int _indiceTransaccion = 0;
-    private string ObtenerMensaje(int indiceTransaccion)
+    //private string ObtenerMensaje()
+    private string ObtenerMensaje()
     {
-        int indice = (Interlocked.Increment(ref _indiceTransaccion) - 1) % 164 + 1;
-        return transacciones[indice];
+        int indice = (Interlocked.Increment(ref _indiceTransaccion) - 1) % _transacciones.Length + 1;
+        return _transacciones[indice];
     }
+
+    private int ObtenerIndiceMensaje()
+    {
+        int indice = (Interlocked.Increment(ref _indiceTransaccion) - 1) % _transacciones.Length + 1;
+        return indice;
+    }
+
 
     public void Dispose()
     {
