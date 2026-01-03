@@ -218,7 +218,7 @@ namespace StampedeLoadTester
                 .OrderBy(m => m.RequestPutDateTime)
                 .ToList();
 
-            testManager.RecibirRespuestasYActualizarPutDateTime(mensajesEnviadosOrdenados, mqConnParams.InputQueue);
+            testManager.RecibirRespuestasYActualizarPutDateTime(mensajesEnviadosOrdenados, mqConnParams.InputQueue, masterVerb.ResponsePreview);
             
             PrintMessagesResults2(mensajesEnviadosOrdenados);
 

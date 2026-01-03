@@ -272,7 +272,8 @@ internal sealed class TestManager : IDisposable
     /// </summary>
     /// <param name="mensajesEnviados">Lista unificada de mensajes enviados, ordenada por RequestPutDateTime</param>
     /// <param name="inputQueueName">Nombre de la cola de entrada de donde se recibirán los mensajes</param>
-    public void RecibirRespuestasYActualizarPutDateTime(List<MensajeEnviado> mensajesEnviados, string inputQueueName)
+    /// <param name="showPreview">Si es true, imprime la previsualización de cada respuesta</param>
+    public void RecibirRespuestasYActualizarPutDateTime(List<MensajeEnviado> mensajesEnviados, string inputQueueName, bool showPreview = false)
     {
         ArgumentNullException.ThrowIfNull(mensajesEnviados, nameof(mensajesEnviados));
         if (_queueManagers[0] is null) throw new InvalidOperationException("Las conexiones no están inicializadas");
@@ -298,7 +299,7 @@ internal sealed class TestManager : IDisposable
                 try
                 {
                     // Hacer GET usando el MessageId como CorrelationId
-                    DateTime putDateTime = IbmMQPlugin.RecibirMensajeYObtenerPutDateTime(inputQueue, mensajeEnviado.MessageId);
+                    DateTime putDateTime = IbmMQPlugin.RecibirMensajeYObtenerPutDateTime(inputQueue, mensajeEnviado.MessageId, showPreview);
                     mensajeEnviado.ResponsePutDateTime = putDateTime;
                     mensajesEnviados[i] = mensajeEnviado;
                 }

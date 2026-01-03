@@ -7,6 +7,8 @@ namespace LoadTester.Plugins
 {
     public class IbmMQPlugin
     {
+        private const int CONSOLE_COL_WIDTH_RESPONSE = 75;
+
         /// <summary>
         /// Realiza un ciclo de PUT sobre la cola de salida y GET sobre la cola de entrada utilizando el texto provisto y devuelve la latencia en ms.
         /// Requiere acceso exclusivo a ambas colas para que el GET tome el mensaje correspondiente.
@@ -248,8 +250,9 @@ namespace LoadTester.Plugins
         /// </summary>
         /// <param name="queue">Cola de entrada desde donde recibir el mensaje</param>
         /// <param name="correlationId">CorrelationId usado para hacer match del mensaje (debe ser de 24 bytes)</param>
+        /// <param name="showPreview">Si es true, imprime la previsualización de la respuesta</param>
         /// <returns>PutDateTime del mensaje recibido</returns>
-        public static DateTime RecibirMensajeYObtenerPutDateTime(MQQueue queue, byte[] correlationId)
+        public static DateTime RecibirMensajeYObtenerPutDateTime(MQQueue queue, byte[] correlationId, bool showPreview = false)
         {
             ArgumentNullException.ThrowIfNull(queue);
             if (correlationId == null || correlationId.Length != 24)
@@ -274,11 +277,19 @@ namespace LoadTester.Plugins
             };
 
             queue.Get(msg, gmo);
-            /*
-            // Leer y imprimir el contenido de la respuesta
-            string contenido = msg.ReadString(msg.MessageLength);
-            Console.WriteLine($"Respuesta: {contenido}");
-           */
+            
+            if (showPreview)
+            {
+                string contenido = msg.ReadString(msg.MessageLength);
+                string preview;
+                
+                if (contenido.Length < CONSOLE_COL_WIDTH_RESPONSE)
+                    preview = contenido;
+                else
+                    preview = contenido.Substring(0, 70) + "...";
+                
+                Console.WriteLine($"Resp:{preview}");
+            }
             
             // Devolver el PutDateTime del mensaje recibido
             return msg.PutDateTime;

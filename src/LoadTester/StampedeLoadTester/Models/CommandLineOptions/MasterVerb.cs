@@ -42,6 +42,9 @@ public class MasterVerb
     [Option("rateLimitDelay", 'r', false, "Delay intencional en microsegundos entre cada mensaje enviado. Actúa como lastre para controlar la tasa de envío y ralentizar la ejecución. Default: 0 (sin delay)")]
     public int RateLimitDelay {get; set;} = 0;
 
+    [Flag("ResponsePreview", 'v', "Si está presente, imprime la previsualización de la respuesta de cada transacción")]
+    public bool ResponsePreview { get; set; } = false;
+
     internal IReadOnlyList<IPAddress> GetSlaves()
     {
         try
