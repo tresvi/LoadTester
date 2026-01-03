@@ -18,17 +18,11 @@ namespace StampedeLoadTester
     //dotnet run -- -f "xxx" -m "10.6.248.10:1414:CHANNEL1:MQGD" -d 2 -i "BNA.CU1.RESPUESTA" -o "BNA.CU1.PEDIDO"
     //dotnet run -- -f "xxx" -m "10.6.248.10:1414:CHANNEL1:MQGD" -d 2 -i "BNA.CU2.RESPUESTA" -o "BNA.CU2.PEDIDO"
     //TODO: Cuando se alcanza a ver la cola de msjes de Respuesta vacios, dejar de intentar recuperar las respuestas, porque todos van a dar MQRC_NO_MSG_AVAILABLE eternamente
-    //TODO: Hacer que el ensayo se detenga por cola llena y continue con el siguiente punto
     //TODO: Evaluar si la funcion ClearQueue es necesaria, ya que siempre deberia vaciarlas
-    //TODO: Implementar lectura de trxs desde archivos.
     //TODO: Implementar salida de trxs a archivos
     //TODO: Hacer algun programa de analisis de resultados
     internal class Program
     {
-        //const string MENSAJE = "    00000008500000020251118115559N0001   000000PC  01100500000000000000                        00307384";
-        //const string MENSAJE = "    00000008500000020251118114435G00111  000000DGPC011005590074200180963317";
-
-        // const string MENSAJE = "    00000777700000020251118114435%XXXXXX%000000  BD011005590074200180963317";
         const int TIME_OUT_VACIADO_DE_COLA_MS = 150_000;
 
         private static string[]? transacciones;

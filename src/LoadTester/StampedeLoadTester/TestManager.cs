@@ -102,13 +102,13 @@ internal sealed class TestManager : IDisposable
             {
                 DelayMicroseconds(delayMicroseconds);
 
-                string mensajeConSegmento = _transacciones[ObtenerIndiceSiguienteMensaje()];
+                string mensajeAEnviar = _transacciones[ObtenerIndiceSiguienteMensaje()];
 
                 DateTime putDateTime = default;
                 byte[] messageId = null!;
                 try
                 {
-                    (putDateTime, messageId) = IbmMQPlugin.EnviarMensaje(queueActual, mensajeConSegmento);
+                    (putDateTime, messageId) = IbmMQPlugin.EnviarMensaje(queueActual, mensajeAEnviar);
                 }
                 catch (MQException mqe) when (mqe.ReasonCode == MQC.MQRC_Q_FULL)
                 {
