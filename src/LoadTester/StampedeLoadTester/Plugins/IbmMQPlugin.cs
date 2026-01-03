@@ -148,10 +148,10 @@ namespace LoadTester.Plugins
 
         public static (DateTime putDateTime, byte[] messageId) EnviarMensaje(MQQueue queue, string texto)
         {
-            if (queue is null) throw new ArgumentNullException(nameof(queue));
+            ArgumentNullException.ThrowIfNull(queue);
 
             // Crear el mensaje MQ
-            MQMessage mensaje = new MQMessage
+            MQMessage mensaje = new()
             {
                 Format = MQC.MQFMT_STRING,
                 MessageId = MQC.MQMI_NONE,
@@ -212,7 +212,7 @@ namespace LoadTester.Plugins
 
         public static double RecibirMensaje(MQQueue queue, byte[]? correlationId = null)
         {
-            if (queue is null) throw new ArgumentNullException(nameof(queue));
+            ArgumentNullException.ThrowIfNull(queue);
 
             var msg = new MQMessage
             {
@@ -223,13 +223,9 @@ namespace LoadTester.Plugins
 
             // Si se proporciona CorrelationID, usarlo para hacer match
             if (correlationId != null && correlationId.Length == 24)
-            {
                 msg.CorrelationId = correlationId;
-            }
             else
-            {
                 msg.CorrelationId = MQC.MQCI_NONE;
-            }
 
             var gmo = new MQGetMessageOptions
             {
@@ -255,7 +251,7 @@ namespace LoadTester.Plugins
         /// <returns>PutDateTime del mensaje recibido</returns>
         public static DateTime RecibirMensajeYObtenerPutDateTime(MQQueue queue, byte[] correlationId)
         {
-            if (queue is null) throw new ArgumentNullException(nameof(queue));
+            ArgumentNullException.ThrowIfNull(queue);
             if (correlationId == null || correlationId.Length != 24)
                 throw new ArgumentException("CorrelationId debe ser un array de 24 bytes", nameof(correlationId));
 

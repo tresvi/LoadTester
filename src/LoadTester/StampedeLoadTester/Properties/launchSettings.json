@@ -2,7 +2,7 @@
   "profiles": {
     "StampedeLoadTester": {
       "commandName": "Project",
-      "commandLineArgs": " -f \".\\Files\\InputFiles\\trx_559_164_users.txt\"  -m \"192.168.0.31;1414;CHANNEL1;MQGD\" -d 2 -i \"BNA.CU2.RESPUESTA\" -o \"BNA.CU2.PEDIDO\""
+      "commandLineArgs": " -f \".\\Files\\InputFiles\\trx_559_164_users.txt\"  -m \"10.6.248.10;1414;CHANNEL1;MQGD\" -d 2 -i \"BNA.CU2.RESPUESTA\" -o \"BNA.CU2.PEDIDO\""
     }
   }
 }

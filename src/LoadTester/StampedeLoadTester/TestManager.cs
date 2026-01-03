@@ -18,18 +18,16 @@ internal sealed class TestManager : IDisposable
 
     private readonly string _queueManagerName;
     private readonly string _outputQueueName;
-    private readonly string _mensaje;
     private readonly List<Hashtable> _connectionProperties;
     private readonly MQQueueManager?[] _queueManagers = new MQQueueManager?[4];
     private readonly MQQueue?[] _outputQueues = new MQQueue?[4];
     private readonly string[] _transacciones;
 
 
-    public TestManager(string queueManagerName, string outputQueueName, string mensaje, List<Hashtable> connectionProperties, ref string[] transacciones)
+    public TestManager(string queueManagerName, string outputQueueName, List<Hashtable> connectionProperties, ref string[] transacciones)
     {
         _queueManagerName = queueManagerName;
         _outputQueueName = outputQueueName;
-        _mensaje = mensaje;
         _connectionProperties = connectionProperties;
         _transacciones = transacciones;
         MensajesEnviados = null; // Se inicializará cuando se ejecute EjecutarWriteQueueLoadTest
@@ -104,15 +102,8 @@ internal sealed class TestManager : IDisposable
             {
                 DelayMicroseconds(delayMicroseconds);
 
-                /*
-                // Incrementar contador de forma thread-safe y obtener valor entre 1 y 164
-                int valorSegmento = (Interlocked.Increment(ref _contadorTransaccion) - 1) % MAX_SEGMENTOS + 1;
-                string segmentoReemplazo = $"D{valorSegmento:D5}  "; // 8 caracteres: "D" + 5 dígitos + 2 espacios
-                string mensajeConSegmento = _mensaje.Replace("%XXXXXX%", segmentoReemplazo);
-                //System.Console.WriteLine(mensajeConSegmento);    
-*/
-                string mensajeConSegmento = _transacciones[ObtenerIndiceMensaje()];
-System.Console.WriteLine(mensajeConSegmento);
+                string mensajeConSegmento = _transacciones[ObtenerIndiceSiguienteMensaje()];
+
                 DateTime putDateTime = default;
                 byte[] messageId = null!;
                 try
@@ -158,31 +149,6 @@ System.Console.WriteLine(mensajeConSegmento);
     }
 
 
-    public int EjecutarHilosInquire(TimeSpan duracionEnsayo, int numHilos)
-    {
-        int messageCounter = 0;
-        long tiempoLimiteTicks = (long)(duracionEnsayo.TotalSeconds * Stopwatch.Frequency);
-
-        Parallel.For(0, numHilos, hiloIndex =>
-        {
-            MQQueue queueActual = _outputQueues[hiloIndex % _outputQueues.Length]!;
-            long horaInicio = Stopwatch.GetTimestamp();
-            long horaFin = horaInicio + tiempoLimiteTicks;
-
-            while (Stopwatch.GetTimestamp() < horaFin)
-            {
-                IbmMQPlugin.EnviarMensaje(queueActual, _mensaje);
-                Interlocked.Increment(ref messageCounter);
-            }
-
-            double elapsedMs = (Stopwatch.GetTimestamp() - horaInicio) * 1000.0 / Stopwatch.Frequency;
-            Console.WriteLine($"Hilo {hiloIndex} tardó {elapsedMs:F2} ms");
-        });
-
-        return messageCounter;
-    }
-
-
     public void EnviarMensajesPrueba(int mensajesPorConexion = 1)
     {
         foreach (MQQueue? queue in _outputQueues)
@@ -191,7 +157,8 @@ System.Console.WriteLine(mensajeConSegmento);
 
             for (int i = 0; i < mensajesPorConexion; i++)
             {
-                IbmMQPlugin.EnviarMensaje(queue, _mensaje);
+                int nroMensaje = ObtenerIndiceSiguienteMensaje();
+                IbmMQPlugin.EnviarMensaje(queue, _transacciones[nroMensaje]);
             }
         }
     }
@@ -412,15 +379,15 @@ System.Console.WriteLine(mensajeConSegmento);
 
     private static int _indiceTransaccion = 0;
     //private string ObtenerMensaje()
-    private string ObtenerMensaje()
+    private string ObtenerSiguienteMensaje()
     {
-        int indice = (Interlocked.Increment(ref _indiceTransaccion) - 1) % _transacciones.Length + 1;
+        int indice = Interlocked.Increment(ref _indiceTransaccion)  % _transacciones.Length;
         return _transacciones[indice];
     }
 
-    private int ObtenerIndiceMensaje()
+    private int ObtenerIndiceSiguienteMensaje()
     {
-        int indice = (Interlocked.Increment(ref _indiceTransaccion) - 1) % _transacciones.Length + 1;
+        int indice = Interlocked.Increment(ref _indiceTransaccion)  % _transacciones.Length;
         return indice;
     }
 

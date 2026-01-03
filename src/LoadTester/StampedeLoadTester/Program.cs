@@ -28,9 +28,10 @@ namespace StampedeLoadTester
         //const string MENSAJE = "    00000008500000020251118115559N0001   000000PC  01100500000000000000                        00307384";
         //const string MENSAJE = "    00000008500000020251118114435G00111  000000DGPC011005590074200180963317";
 
-        const string MENSAJE = "    00000777700000020251118114435%XXXXXX%000000  BD011005590074200180963317";
+        // const string MENSAJE = "    00000777700000020251118114435%XXXXXX%000000  BD011005590074200180963317";
+        const int TIME_OUT_VACIADO_DE_COLA_MS = 150_000;
 
-        private static string[] transacciones;
+        private static string[]? transacciones;
 
         /// <summary>
         /// Crea una lista de Hashtables con las propiedades de conexión MQ basadas en MqConnectionParams
@@ -72,7 +73,7 @@ namespace StampedeLoadTester
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"ERROR validando parametros de entrada: {ex}");
+                Console.Error.WriteLine($"ERROR validando parametros de entrada: {ex.Message}");
                 return;
             }
             
@@ -114,7 +115,7 @@ namespace StampedeLoadTester
                 if (masterVerb.ThreadNumber > Environment.ProcessorCount)
                     throw new Exception($"El nro de hilos ({masterVerb.ThreadNumber}) no puede ser mayor al nro de CPUs ({Environment.ProcessorCount})");
 
-                transacciones = File.ReadAllLines(masterVerb.File);
+                transacciones = File.ReadAllLines(masterVerb.File!);
                 if (transacciones.Length == 0)
                     throw new Exception($"El archivo de entrada {masterVerb.File} debe contener al menos 1 transaccion");
 
@@ -129,7 +130,7 @@ namespace StampedeLoadTester
 
             RemoteControllerService remoteController = new();
             List<Hashtable> connectionProperties = CreateConnectionProperties(mqConnParams);
-            using TestManager testManager = new(mqConnParams.MqManagerName, mqConnParams.OutputQueue, MENSAJE, connectionProperties, ref transacciones);
+            using TestManager testManager = new(mqConnParams.MqManagerName, mqConnParams.OutputQueue, connectionProperties, ref transacciones);
 
             CancellationTokenSource? monitorProfCts = null;
             Task<Dictionary<int, int>>? taskMonitor = null;
@@ -208,7 +209,7 @@ namespace StampedeLoadTester
 
             Console.Write($"\nEsperando a que se procesen todos los mensajes de la cola {mqConnParams.OutputQueue} ...");
             List<(DateTime hora, int profundidad)> medicionesProfundidad = [];
-            testManager.WaitForQueueEmptied(mqConnParams.OutputQueue, measurements: out medicionesProfundidad);
+            testManager.WaitForQueueEmptied(mqConnParams.OutputQueue, out medicionesProfundidad, TIME_OUT_VACIADO_DE_COLA_MS);
             Console.WriteLine($": OK");
 
             PrintQueueStatistics(medicionesProfundidad);
@@ -263,7 +264,7 @@ namespace StampedeLoadTester
             List<Hashtable> connectionProperties = CreateConnectionProperties(mqConnectionParams);
             var remoteManager = new RemoteControllerService();
             var cts = new CancellationTokenSource();
-            remoteManager.Listen(slaveVerb.Port, cts.Token, mqConnectionParams.MqManagerName, mqConnectionParams.OutputQueue, MENSAJE, connectionProperties);
+            remoteManager.Listen(slaveVerb.Port, cts.Token, mqConnectionParams.MqManagerName, mqConnectionParams.OutputQueue, connectionProperties);
         }
 
 
@@ -491,9 +492,9 @@ namespace StampedeLoadTester
                 if (tiempoTotalSegundos > 0)
                 {
                     double throughput = totalMensajes / tiempoTotalSegundos;
-                    Console.WriteLine($"\n-------------------------- Throughput -------------------------");
+                    Console.WriteLine($"\n---------------- Throughput de cola de Pedido -----------------");
                     Console.WriteLine($"Tiempo total de envío:   {tiempoTotalSegundos:F2} s");
-                    Console.WriteLine($"Throughput:              {throughput:F2} mensajes/segundo");
+                    Console.WriteLine($"Throughput:              {throughput:F2} msjes/seg");
                     
                     // Throughput de respuestas recibidas
                     if (mensajesConRespuesta > 0)
