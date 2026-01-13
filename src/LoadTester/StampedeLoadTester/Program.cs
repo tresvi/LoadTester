@@ -14,9 +14,9 @@ using Tresvi.CommandParser.Attributtes.Keywords;
 
 namespace StampedeLoadTester
 {
-    //dotnet run -- -f "xxx" -s "192.168.0.31, 192.168.0.24" -p 8888 -m "192.168.0.31:1414:CHANNEL1:MQGD" -d 2 -i "BNA.XX1.RESPUESTA" -o "BNA.XX1.PEDIDO"
-    //dotnet run -- -f "xxx" -m "10.6.248.10:1414:CHANNEL1:MQGD" -d 2 -i "BNA.CU1.RESPUESTA" -o "BNA.CU1.PEDIDO"
-    //dotnet run -- -f "xxx" -m "10.6.248.10:1414:CHANNEL1:MQGD" -d 2 -i "BNA.CU2.RESPUESTA" -o "BNA.CU2.PEDIDO"
+    //dotnet run -- -f "xxx" -s "192.168.0.31, 192.168.0.24" -p 8888 -m "192.168.0.31;1414;CHANNEL1;MQGD" -d 2 -i "BNA.XX1.RESPUESTA" -o "BNA.XX1.PEDIDO"
+    //dotnet run -- -f "xxx" -m "10.6.248.10;1414;CHANNEL1;MQGD" -d 2 -i "BNA.CU1.RESPUESTA" -o "BNA.CU1.PEDIDO"
+    //dotnet run -- -f "xxx" -m "10.6.248.10;1414;CHANNEL1;MQGD" -d 2 -i "BNA.CU2.RESPUESTA" -o "BNA.CU2.PEDIDO"
     //TODO: Cuando se alcanza a ver la cola de msjes de Respuesta vacios, dejar de intentar recuperar las respuestas, porque todos van a dar MQRC_NO_MSG_AVAILABLE eternamente
     //TODO: Evaluar si la funcion ClearQueue es necesaria, ya que siempre deberia vaciarlas
     //TODO: Implementar salida de trxs a archivos
@@ -246,6 +246,11 @@ namespace StampedeLoadTester
             {
                 if (slaveVerb.RateLimitDelay < 0)
                     throw new Exception($"El delay de lastre no puede ser negativo. Valor: ({slaveVerb.RateLimitDelay})");
+                
+                //TODO: Implementar esto en escalvos. 
+                // List<string> transacciones = File.ReadAllLines(slaveVerb.File!);
+                //if (transacciones.Length == 0)
+                //    throw new Exception($"El archivo de entrada {masterVerb.File} debe contener al menos 1 transaccion");
                 
                 mqConnectionParams.LoadMqConnectionParams(slaveVerb.MqConnection, slaveVerb.OutputQueue, slaveVerb.InputQueue);
             }

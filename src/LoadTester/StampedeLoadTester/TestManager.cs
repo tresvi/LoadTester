@@ -378,17 +378,18 @@ internal sealed class TestManager : IDisposable
     }
 
 
-    private static int _indiceTransaccion = 0;
+    private static int _indiceTransaccion = -1;
     //private string ObtenerMensaje()
     private string ObtenerSiguienteMensaje()
     {
-        int indice = Interlocked.Increment(ref _indiceTransaccion)  % _transacciones.Length;
+        int indice = Interlocked.Increment(ref _indiceTransaccion) % _transacciones.Length;
         return _transacciones[indice];
     }
 
+
     private int ObtenerIndiceSiguienteMensaje()
     {
-        int indice = Interlocked.Increment(ref _indiceTransaccion)  % _transacciones.Length;
+        int indice = Interlocked.Increment(ref _indiceTransaccion) % _transacciones.Length;
         return indice;
     }
 

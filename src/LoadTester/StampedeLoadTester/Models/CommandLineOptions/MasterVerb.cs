@@ -12,7 +12,7 @@ public class MasterVerb
     private const string SLAVE_PORT_DEFAULT = "8888";
 
     [FileExists()]
-    [Option("file", 'f', true, "Archivo con las transacciones a eviar")]
+    [Option("file", 'f', true, "Archivo con las transacciones a enviar")]
     public string? File { get; set; }
 
     [Option("slaves", 's', false, "Lista de IPs de los esclavos separados por punto y coma (1.1.1.1;2.2.2.2;3.3.3.3)")]

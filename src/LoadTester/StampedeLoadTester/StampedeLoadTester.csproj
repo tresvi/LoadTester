@@ -50,6 +50,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="Files\InputFiles\trx_500_simple.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="Files\InputFiles\trx_559_164_users.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
