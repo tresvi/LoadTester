@@ -45,6 +45,9 @@ public class MasterVerb
     [Flag("ResponsePreview", 'v', "Si está presente, imprime la previsualización de la respuesta de cada transacción")]
     public bool ResponsePreview { get; set; } = false;
 
+    [Option("messageExpiration", 'e', false, "Tiempo de expiración en segundos para los mensajes enviados a la cola de pedido. Si es 0 (default), los mensajes no expiran nunca.")]
+    public int MessageExpiration { get; set; } = 0;
+
     internal IReadOnlyList<IPAddress> GetSlaves()
     {
         try

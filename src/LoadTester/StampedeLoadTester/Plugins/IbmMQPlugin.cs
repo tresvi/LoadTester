@@ -115,7 +115,7 @@ namespace LoadTester.Plugins
             => (double)ticks * 1_000_000.0 / Stopwatch.Frequency;
 
 
-        public static (DateTime putDateTime, byte[] messageId) EnviarMensaje(MQQueueManager qmgr, string queueName, string texto)
+        public static (DateTime putDateTime, byte[] messageId) EnviarMensaje(MQQueueManager qmgr, string queueName, string texto, int expirationSeconds = 0)
         {
             MQQueue? cola = null;
             Stopwatch sw = new Stopwatch();
@@ -125,7 +125,7 @@ namespace LoadTester.Plugins
                 int openOptions = MQC.MQOO_OUTPUT;
                 cola = qmgr.AccessQueue(queueName, openOptions);
                 
-                (DateTime putDateTime, byte[] messageId) resultado = EnviarMensaje(cola, texto);
+                (DateTime putDateTime, byte[] messageId) resultado = EnviarMensaje(cola, texto, expirationSeconds);
                 return resultado;
             }
             catch (MQException mqe)
@@ -148,7 +148,7 @@ namespace LoadTester.Plugins
             }
         }
 
-        public static (DateTime putDateTime, byte[] messageId) EnviarMensaje(MQQueue queue, string texto)
+        public static (DateTime putDateTime, byte[] messageId) EnviarMensaje(MQQueue queue, string texto, int expirationSeconds = 0)
         {
             ArgumentNullException.ThrowIfNull(queue);
 
@@ -159,6 +159,17 @@ namespace LoadTester.Plugins
                 MessageId = MQC.MQMI_NONE,
                 CorrelationId = MQC.MQCI_NONE
             };
+
+            // En IBM MQ, Expiry se mide en décimas de segundo (0.1 segundos)
+            // Si expirationSeconds es 0, no expira (unlimited)
+            if (expirationSeconds > 0)
+            {
+                mensaje.Expiry = expirationSeconds * 10;    // Convertir segundos a décimas de segundo
+            }
+            else
+            {
+                mensaje.Expiry = MQC.MQEI_UNLIMITED;        // 0 significa que no expira nunca
+            }
 
             mensaje.WriteString(texto);
 

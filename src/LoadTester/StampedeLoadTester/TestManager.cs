@@ -22,14 +22,16 @@ internal sealed class TestManager : IDisposable
     private readonly MQQueueManager?[] _queueManagers = new MQQueueManager?[4];
     private readonly MQQueue?[] _outputQueues = new MQQueue?[4];
     private readonly string[] _transacciones;
+    private readonly int _messageExpirationSeconds;
 
 
-    public TestManager(string queueManagerName, string outputQueueName, List<Hashtable> connectionProperties, ref string[] transacciones)
+    public TestManager(string queueManagerName, string outputQueueName, List<Hashtable> connectionProperties, ref string[] transacciones, int messageExpirationSeconds = 0)
     {
         _queueManagerName = queueManagerName;
         _outputQueueName = outputQueueName;
         _connectionProperties = connectionProperties;
         _transacciones = transacciones;
+        _messageExpirationSeconds = messageExpirationSeconds;
         MensajesEnviados = null; // Se inicializará cuando se ejecute EjecutarWriteQueueLoadTest
     }
 
@@ -108,7 +110,7 @@ internal sealed class TestManager : IDisposable
                 byte[] messageId = null!;
                 try
                 {
-                    (putDateTime, messageId) = IbmMQPlugin.EnviarMensaje(queueActual, mensajeAEnviar);
+                    (putDateTime, messageId) = IbmMQPlugin.EnviarMensaje(queueActual, mensajeAEnviar, _messageExpirationSeconds);
                 }
                 catch (MQException mqe) when (mqe.ReasonCode == MQC.MQRC_Q_FULL)
                 {
@@ -158,7 +160,7 @@ internal sealed class TestManager : IDisposable
             for (int i = 0; i < mensajesPorConexion; i++)
             {
                 int nroMensaje = ObtenerIndiceSiguienteMensaje();
-                IbmMQPlugin.EnviarMensaje(queue, _transacciones[nroMensaje]);
+                IbmMQPlugin.EnviarMensaje(queue, _transacciones[nroMensaje], _messageExpirationSeconds);
             }
         }
     }

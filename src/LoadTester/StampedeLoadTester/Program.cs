@@ -124,7 +124,7 @@ namespace StampedeLoadTester
 
             RemoteControllerService remoteController = new();
             List<Hashtable> connectionProperties = CreateConnectionProperties(mqConnParams);
-            using TestManager testManager = new(mqConnParams.MqManagerName, mqConnParams.OutputQueue, connectionProperties, ref transacciones);
+            using TestManager testManager = new(mqConnParams.MqManagerName, mqConnParams.OutputQueue, connectionProperties, ref transacciones, masterVerb.MessageExpiration);
 
             CancellationTokenSource? monitorProfCts = null;
             Task<Dictionary<int, int>>? taskMonitor = null;

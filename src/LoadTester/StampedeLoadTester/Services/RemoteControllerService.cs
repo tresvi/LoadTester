@@ -26,18 +26,9 @@ namespace StampedeLoadTester.Services;
         private const string ACK_MESSAGE = "ACK";
         private const string ERROR_MESSAGE = "ERROR";
         private const string RESULT_PREFIX = "RESULT:";
-
-        private TestDefinition? _testDefinition;
-
         private int? _lastMessageCounter = null;
 
-        /// <summary>
-        /// Establece la definición de prueba que se usará para inicializar las conexiones
-        /// </summary>
-        public void SetTestDefinition(TestDefinition testDefinition)
-        {
-            _testDefinition = testDefinition;
-        }
+
 
     /// <summary>
     /// Envía un mensaje "ping" a la IP y puerto especificados y espera bloqueado una respuesta "pong"
