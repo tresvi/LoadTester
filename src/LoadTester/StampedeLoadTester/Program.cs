@@ -16,7 +16,7 @@ using Tresvi.CommandParser.Attributtes.Keywords;
 namespace StampedeLoadTester
 {
     //dotnet run -- -f "xxx" -s "192.168.0.31, 192.168.0.24" -p 8888 -m "192.168.0.31;1414;CHANNEL1;MQGD" -d 2 -i "BNA.XX1.RESPUESTA" -o "BNA.XX1.PEDIDO"
-    //dotnet run -- -f "xxx" -m "10.6.248.10;1414;CHANNEL1;MQGD" -d 2 -i "BNA.CU1.RESPUESTA" -o "BNA.CU1.PEDIDO"
+    //dotnet run -- -f ".\TestFiles\" -m "10.6.248.10;1414;CHANNEL1;MQGD" -d 2 -i "BNA.CU1.RESPUESTA" -o "BNA.CU1.PEDIDO"
     //dotnet run -- -f "xxx" -m "10.6.248.10;1414;CHANNEL1;MQGD" -d 2 -i "BNA.CU2.RESPUESTA" -o "BNA.CU2.PEDIDO"
     //TODO: Cuando se alcanza a ver la cola de msjes de Respuesta vacios, dejar de intentar recuperar las respuestas, porque todos van a dar MQRC_NO_MSG_AVAILABLE eternamente
     //TODO: Evaluar si la funcion ClearQueue es necesaria, ya que siempre deberia vaciarlas
@@ -96,6 +96,7 @@ namespace StampedeLoadTester
             Console.WriteLine($"SlaveTimeout: {masterVerb.SlaveTimeout}");
             Console.WriteLine($"ThreadNumber: {masterVerb.ThreadNumber}");
             Console.WriteLine($"MQConnection: {masterVerb.MqConnection}");
+            Console.WriteLine($"");
 
             IReadOnlyList<IPAddress> ipSlaves;
             MqConnectionParams mqConnParams = new();
@@ -125,7 +126,7 @@ namespace StampedeLoadTester
                 transacciones = transactionFile.Transacciones.ToArray();
 
                 ipSlaves = masterVerb.GetSlaves();
-                mqConnParams.LoadMqConnectionParams(masterVerb.MqConnection, masterVerb.OutputQueue, masterVerb.InputQueue);
+                mqConnParams.LoadMqConnectionParams(masterVerb.MqConnection, transactionFile.OutputQueue, transactionFile.InputQueue);
             }
             catch (Exception ex)
             {
@@ -142,19 +143,20 @@ namespace StampedeLoadTester
 
             try
             {
+                Console.ForegroundColor = ConsoleColor.Green;
+
                 Console.Write("Inicializando conexiones MQ en el master...");
                 testManager.InicializarConexiones();
                 Console.WriteLine(": OK");
 
-                Console.Write("Vaciando cola de pedido...");
+                Console.Write($"Vaciando cola de pedido {transactionFile.InputQueue}...");
                 float msjesEliminadosPorSegundo = testManager.VaciarCola(mqConnParams.OutputQueue);
                 Console.WriteLine($": OK ({msjesEliminadosPorSegundo:F2} msjes/s)");
 
-                Console.Write("Vaciando cola de respuesta...");
+                Console.Write($"Vaciando cola de respuesta {transactionFile.OutputQueue}...");
                 msjesEliminadosPorSegundo = testManager.VaciarCola(mqConnParams.InputQueue);
                 Console.WriteLine($": OK ({msjesEliminadosPorSegundo:F2} msjes/s)");
 
-                Console.ForegroundColor = ConsoleColor.Green;
                 Console.Write("Realizando WarmUp en el master...");
                 testManager.EnviarMensajesPrueba();
                 Console.WriteLine(": OK");

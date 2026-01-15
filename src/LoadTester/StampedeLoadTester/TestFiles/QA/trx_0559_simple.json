@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "inputQueue": "BNA.CU2.RESPUESTA",
+  "outputQueue": "BNA.CU2.PEDIDO",
+  "transacciones": [
+    "    00000008500000020251118114435D00001  000000  BD011005590085200002819859"
+  ]
+}

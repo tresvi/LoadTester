@@ -19,6 +19,7 @@ public class MasterVerb
     public string Slaves { get; set; } = "";
 
     [Option("slavePort", 'p', false, "Puerto donde escucharán los esclavos. Todos los esclavos deberán usar el mismo. Default: " + SLAVE_PORT_DEFAULT )]
+    [Requires(nameof(Slaves))]
     public int SlavePort { get; set; } = int.Parse(SLAVE_PORT_DEFAULT);
 
     [Option("slaveTimeout", 'T', false, "Timeout de espera para que los esclavos respondan al maestro (en segundos). Si se omite, se usará el valor por defecto")]
@@ -33,12 +34,6 @@ public class MasterVerb
     [Option("duration", 'd', true, "Duracion de prueba en segundos.")]
     public int Duration {get; set;}
 
-    [Option("IputQueue", 'i', true, "Cola de entrada para recibir los mensajes.")]
-    public string InputQueue { get; set;} = "";
-
-    [Option("OutputQueue", 'o', true, "Cola de salida para enviar los mensajes.")]
-    public string OutputQueue { get; set;} = "";
-
     [Option("rateLimitDelay", 'r', false, "Delay intencional en microsegundos entre cada mensaje enviado. Actúa como lastre para controlar la tasa de envío y ralentizar la ejecución. Default: 0 (sin delay)")]
     public int RateLimitDelay {get; set;} = 0;
 
@@ -52,7 +47,7 @@ public class MasterVerb
     {
         try
         {	
-            if (string.IsNullOrEmpty(Slaves)) return Array.Empty<IPAddress>();
+            if (string.IsNullOrEmpty(Slaves)) return [];
             return Slaves.Split(';').Select(slave => IPAddress.Parse(slave.Trim())).ToList();
         }
         catch (Exception ex)

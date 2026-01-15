@@ -12,7 +12,7 @@ namespace StampedeLoadTester;
 
 internal sealed class TestManager : IDisposable
 {
-
+    private const int WARMUP_MSG_EXPIRATION_SECONDS = 2;
 
     public List<MensajeEnviado>[]? MensajesEnviados {get; private set;}
 
@@ -160,7 +160,7 @@ internal sealed class TestManager : IDisposable
             for (int i = 0; i < mensajesPorConexion; i++)
             {
                 int nroMensaje = ObtenerIndiceSiguienteMensaje();
-                IbmMQPlugin.EnviarMensaje(queue, _transacciones[nroMensaje], _messageExpirationSeconds);
+                IbmMQPlugin.EnviarMensaje(queue, _transacciones[nroMensaje], WARMUP_MSG_EXPIRATION_SECONDS);
             }
         }
     }
