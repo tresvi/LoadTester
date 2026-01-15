@@ -89,7 +89,11 @@ namespace StampedeLoadTester.Services;
     /// </summary>
     /// <param name="port">Puerto en el que escuchar</param>
     /// <param name="cancellationToken">Token para cancelar la escucha</param>
-    public void Listen(int port, CancellationToken cancellationToken,string queueManagerName, string outputQueueName, List<Hashtable> connectionProperties)
+    /// <param name="queueManagerName">Nombre del queue manager</param>
+    /// <param name="outputQueueName">Nombre de la cola de salida</param>
+    /// <param name="connectionProperties">Propiedades de conexión MQ</param>
+    /// <param name="messageExpirationSeconds">Tiempo de expiración en segundos para los mensajes (0 = sin expiración)</param>
+    public void Listen(int port, CancellationToken cancellationToken,string queueManagerName, string outputQueueName, List<Hashtable> connectionProperties, int messageExpirationSeconds = 0)
     {
         UdpClient? listener = null;
         try
@@ -99,7 +103,7 @@ namespace StampedeLoadTester.Services;
             Console.WriteLine($"Escuchando comandos en puerto {port}...");
             //TODO: Obtener los mensajes para enviar en modo esclavo.
             string[] algo ={"hola"};
-            using TestManager manager = new(queueManagerName, outputQueueName, connectionProperties, ref algo);
+            using TestManager manager = new(queueManagerName, outputQueueName, connectionProperties, ref algo, messageExpirationSeconds);
 
             while (!cancellationToken.IsCancellationRequested)
             {

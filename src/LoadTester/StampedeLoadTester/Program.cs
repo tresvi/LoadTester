@@ -109,6 +109,9 @@ namespace StampedeLoadTester
                 if (masterVerb.ThreadNumber > Environment.ProcessorCount)
                     throw new Exception($"El nro de hilos ({masterVerb.ThreadNumber}) no puede ser mayor al nro de CPUs ({Environment.ProcessorCount})");
 
+                if (masterVerb.MessageExpiration != 0 && masterVerb.MessageExpiration < 240)
+                    throw new Exception($"El tiempo de expiración debe ser al menos 240 segundos o 0 (sin expiración). Valor ingresado: ({masterVerb.MessageExpiration})");
+
                 transacciones = File.ReadAllLines(masterVerb.File!);
                 if (transacciones.Length == 0)
                     throw new Exception($"El archivo de entrada {masterVerb.File} debe contener al menos 1 transaccion");
@@ -246,6 +249,9 @@ namespace StampedeLoadTester
             {
                 if (slaveVerb.RateLimitDelay < 0)
                     throw new Exception($"El delay de lastre no puede ser negativo. Valor: ({slaveVerb.RateLimitDelay})");
+
+                if (slaveVerb.MessageExpiration != 0 && slaveVerb.MessageExpiration < 240)
+                    throw new Exception($"El tiempo de expiración debe ser al menos 240 segundos o 0 (sin expiración). Valor ingresado: ({slaveVerb.MessageExpiration})");
                 
                 //TODO: Implementar esto en escalvos. 
                 // List<string> transacciones = File.ReadAllLines(slaveVerb.File!);
@@ -263,7 +269,7 @@ namespace StampedeLoadTester
             List<Hashtable> connectionProperties = CreateConnectionProperties(mqConnectionParams);
             var remoteManager = new RemoteControllerService();
             var cts = new CancellationTokenSource();
-            remoteManager.Listen(slaveVerb.Port, cts.Token, mqConnectionParams.MqManagerName, mqConnectionParams.OutputQueue, connectionProperties);
+            remoteManager.Listen(slaveVerb.Port, cts.Token, mqConnectionParams.MqManagerName, mqConnectionParams.OutputQueue, connectionProperties, slaveVerb.MessageExpiration);
         }
 
 

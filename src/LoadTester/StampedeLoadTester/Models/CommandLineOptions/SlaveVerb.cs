@@ -27,5 +27,8 @@ internal class SlaveVerb
     [Option("rateLimitDelay", 'r', false, "Delay intencional en microsegundos entre cada mensaje enviado. Actúa como lastre para controlar la tasa de envío y ralentizar la ejecución. Default: 0 (sin delay)")]
     public int RateLimitDelay {get; set;} = 0;
 
+    [Option("messageExpiration", 'e', false, "Tiempo de expiración en segundos para los mensajes enviados a la cola de pedido. Mínimo: 240 segundos. Si se omite o es 0 (default), los mensajes no expiran nunca.")]
+    public int MessageExpiration { get; set; } = 0;
+
 }
 
