@@ -12,6 +12,7 @@ using MathNet.Numerics.Statistics;
 using StampedeLoadTester.Models;
 using Tresvi.CommandParser.Attributtes.Keywords;
 
+
 namespace StampedeLoadTester
 {
     //dotnet run -- -f "xxx" -s "192.168.0.31, 192.168.0.24" -p 8888 -m "192.168.0.31;1414;CHANNEL1;MQGD" -d 2 -i "BNA.XX1.RESPUESTA" -o "BNA.XX1.PEDIDO"
@@ -57,6 +58,7 @@ namespace StampedeLoadTester
         }
 
 
+
         static async Task Main(string[] args)
         {
 
@@ -97,6 +99,7 @@ namespace StampedeLoadTester
 
             IReadOnlyList<IPAddress> ipSlaves;
             MqConnectionParams mqConnParams = new();
+            TransactionFile transactionFile = new();
 
             try
             {
@@ -112,9 +115,14 @@ namespace StampedeLoadTester
                 if (masterVerb.MessageExpiration != 0 && masterVerb.MessageExpiration < 240)
                     throw new Exception($"El tiempo de expiración debe ser al menos 240 segundos o 0 (sin expiración). Valor ingresado: ({masterVerb.MessageExpiration})");
 
-                transacciones = File.ReadAllLines(masterVerb.File!);
-                if (transacciones.Length == 0)
-                    throw new Exception($"El archivo de entrada {masterVerb.File} debe contener al menos 1 transaccion");
+                // Cargar el archivo JSON en la instancia de TransactionFile
+                transactionFile.Load(masterVerb.File!);
+                
+                // Usar las transacciones del JSON
+                if (transactionFile.Transacciones.Count == 0)
+                    throw new Exception($"El archivo JSON {masterVerb.File} debe contener al menos 1 transaccion");
+                
+                transacciones = transactionFile.Transacciones.ToArray();
 
                 ipSlaves = masterVerb.GetSlaves();
                 mqConnParams.LoadMqConnectionParams(masterVerb.MqConnection, masterVerb.OutputQueue, masterVerb.InputQueue);
