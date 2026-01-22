@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using IBM.WMQ;
 using LoadTester.Plugins;
 using StampedeLoadTester.Models;
+using StampedeLoadTester.Services;
 
 namespace StampedeLoadTester;
 
@@ -23,7 +24,7 @@ internal sealed class TestManager : IDisposable
     private readonly MQQueue?[] _outputQueues = new MQQueue?[4];
     private readonly string[] _transacciones;
     private readonly int _messageExpirationSeconds;
-
+    private SimpleRateLimiter? _limiter;
 
     public TestManager(string queueManagerName, string outputQueueName, List<Hashtable> connectionProperties, ref string[] transacciones, int messageExpirationSeconds = 0)
     {
@@ -86,8 +87,15 @@ internal sealed class TestManager : IDisposable
         return IbmMQPlugin.VaciarCola(_queueManagers[0]!, queueName);
     }
 
-    public (int messageCounter, bool colaLlena) EjecutarWriteQueueLoadTest(TimeSpan duracionEnsayo, int numHilos, int delayMicroseconds)
+
+    public (int messageCounter, bool colaLlena) EjecutarWriteQueueLoadTest(TimeSpan duracionEnsayo, int numHilos, int? rateLimit = null)
     {
+        // Inicializar el limiter si se especifica rateLimit
+        if (rateLimit.HasValue && rateLimit.Value > 0)
+            _limiter = new SimpleRateLimiter(rateLimit.Value);
+        else
+            _limiter = null;
+
         int messageCounter = 0;
         bool colaLlena = false;
         long tiempoLimiteTicks = (long)(duracionEnsayo.TotalSeconds * Stopwatch.Frequency);
@@ -102,14 +110,14 @@ internal sealed class TestManager : IDisposable
 
             while (!loopState.ShouldExitCurrentIteration && Stopwatch.GetTimestamp() < horaFin)
             {
-                DelayMicroseconds(delayMicroseconds);
-
                 string mensajeAEnviar = _transacciones[ObtenerIndiceSiguienteMensaje()];
 
                 DateTime putDateTime = default;
                 byte[] messageId = null!;
                 try
                 {
+                    // Usar rate limiter si existe
+                    if (_limiter != null) _limiter.Wait();
                     (putDateTime, messageId) = IbmMQPlugin.EnviarMensaje(queueActual, mensajeAEnviar, _messageExpirationSeconds);
                 }
                 catch (MQException mqe) when (mqe.ReasonCode == MQC.MQRC_Q_FULL)
@@ -140,14 +148,11 @@ internal sealed class TestManager : IDisposable
 
     static void DelayMicroseconds(int microseconds)
     {
-        long ticksObjetivo =
-            microseconds * (Stopwatch.Frequency / 1_000_000);
-
+        long ticksObjetivo = microseconds * (Stopwatch.Frequency / 1_000_000);
         long start = Stopwatch.GetTimestamp();
 
         while (Stopwatch.GetTimestamp() - start < ticksObjetivo)
-        {
-        }
+        { }
     }
 
 
@@ -323,7 +328,7 @@ internal sealed class TestManager : IDisposable
     /// </summary>
     /// <param name="queueName">Nombre de la cola a verificar</param>
     /// <param name="timeoutMs">Timeout en milisegundos. Si es null, esperará indefinidamente. Valor por defecto: null</param>
-    /// <param name="pollingIntervalMs">Intervalo en milisegundos entre consultas de profundidad. Valor por defecto: 100ms</param>
+    /// <param name="pollingIntervalMs">Intervalo en milisegundos entre consultas de profundidad.</param>
     /// <returns>true si la cola se vació, false si se alcanzó el timeout</returns>
     public bool WaitForQueueEmptied(string queueName, out List<(DateTime, int)> measurements, int? timeoutMs = null, int pollingIntervalMs = 100)
     {

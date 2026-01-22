@@ -15,9 +15,9 @@ using Tresvi.CommandParser.Attributtes.Keywords;
 
 namespace StampedeLoadTester
 {
-    //dotnet run -- -f "xxx" -s "192.168.0.31, 192.168.0.24" -p 8888 -m "192.168.0.31;1414;CHANNEL1;MQGD" -d 2 -i "BNA.XX1.RESPUESTA" -o "BNA.XX1.PEDIDO"
-    //dotnet run -- -f ".\TestFiles\" -m "10.6.248.10;1414;CHANNEL1;MQGD" -d 2 -i "BNA.CU1.RESPUESTA" -o "BNA.CU1.PEDIDO"
-    //dotnet run -- -f "xxx" -m "10.6.248.10;1414;CHANNEL1;MQGD" -d 2 -i "BNA.CU2.RESPUESTA" -o "BNA.CU2.PEDIDO"
+    //dotnet run -- -f ".\TestFiles\Desa\trx_0559_164users.json" -m "10.6.248.10;1414;CHANNEL1;MQGD" -d 2 
+    //dotnet run -- -f ".\TestFiles\Desa\trx_0559_164users.json" -s "192.168.0.31, 192.168.0.24" -p 8888 -m "192.168.0.31;1414;CHANNEL1;MQGD" -d 2 
+    //dotnet run -- -f ".\TestFiles\Desa\trx_0559_164users.json" -m "10.6.248.10;1414;CHANNEL1;MQGD" -d 2 
     //TODO: Cuando se alcanza a ver la cola de msjes de Respuesta vacios, dejar de intentar recuperar las respuestas, porque todos van a dar MQRC_NO_MSG_AVAILABLE eternamente
     //TODO: Evaluar si la funcion ClearQueue es necesaria, ya que siempre deberia vaciarlas
     //TODO: Implementar salida de trxs a archivos
@@ -56,7 +56,6 @@ namespace StampedeLoadTester
                 }
             };
         }
-
 
 
         static async Task Main(string[] args)
@@ -107,8 +106,8 @@ namespace StampedeLoadTester
                 if (masterVerb.Duration < 0)
                     throw new Exception($"La duracion del ensayo no puede ser negativa. Valor: ({masterVerb.Duration})");
 
-                if (masterVerb.RateLimitDelay < 0)
-                    throw new Exception($"El delay de lastre no puede ser negativo. Valor: ({masterVerb.RateLimitDelay})");
+                if (masterVerb.RateLimit < 0)
+                    throw new Exception($"El límite de mensajes por segundo no puede ser negativo. Valor: ({masterVerb.RateLimit})");
 
                 if (masterVerb.ThreadNumber > Environment.ProcessorCount)
                     throw new Exception($"El nro de hilos ({masterVerb.ThreadNumber}) no puede ser mayor al nro de CPUs ({Environment.ProcessorCount})");
@@ -116,14 +115,13 @@ namespace StampedeLoadTester
                 if (masterVerb.MessageExpiration != 0 && masterVerb.MessageExpiration < 240)
                     throw new Exception($"El tiempo de expiración debe ser al menos 240 segundos o 0 (sin expiración). Valor ingresado: ({masterVerb.MessageExpiration})");
 
-                // Cargar el archivo JSON en la instancia de TransactionFile
-                transactionFile.Load(masterVerb.File!);
+                transactionFile.Load(masterVerb.File!);     // Cargar el archivo JSON en la instancia de TransactionFile
                 
                 // Usar las transacciones del JSON
-                if (transactionFile.Transacciones.Count == 0)
+                if (transactionFile.Transacciones.Length == 0)
                     throw new Exception($"El archivo JSON {masterVerb.File} debe contener al menos 1 transaccion");
                 
-                transacciones = transactionFile.Transacciones.ToArray();
+                transacciones = transactionFile.Transacciones;
 
                 ipSlaves = masterVerb.GetSlaves();
                 mqConnParams.LoadMqConnectionParams(masterVerb.MqConnection, transactionFile.OutputQueue, transactionFile.InputQueue);
@@ -161,6 +159,11 @@ namespace StampedeLoadTester
                 testManager.EnviarMensajesPrueba();
                 Console.WriteLine(": OK");
 
+                Console.Write("Vaciando cola de respuesta después del warmup...");
+                Thread.Sleep(2000);
+                testManager.VaciarCola(mqConnParams.InputQueue);
+                Console.WriteLine($": OK");
+
                 if (ipSlaves.Count != 0)
                 {
                     Console.WriteLine("\n\n***********Verificando acceso a instancias en modo slave***********\n");
@@ -185,31 +188,33 @@ namespace StampedeLoadTester
                 return;
             }
 
-            Console.WriteLine("Iniciando monitoreo de profundidad de la cola...");
+            Console.WriteLine("\nIniciando monitoreo de profundidad de la cola...");
             monitorProfCts = new CancellationTokenSource();
             taskMonitor = testManager.MonitorearProfundidadColaAsync(mqConnParams.OutputQueue, monitorProfCts.Token);
 
             Console.ForegroundColor = ConsoleColor.Green;
             int numHilos = masterVerb.ThreadNumber;
             Console.WriteLine($"{DateTime.Now:HH:mm:ss.ff} - Ejecutando test de carga en el master a {numHilos} hilos, aguarde {masterVerb.Duration} segundos...");
-            (int nroMensajesColocados, bool colaLlena) = ExecuteWriteQueueTest(testManager, numHilos, masterVerb.Duration * 1000, masterVerb.RateLimitDelay);
+            (int nroMensajesColocados, bool colaLlena) = ExecuteWriteQueueTest(testManager, numHilos, masterVerb.Duration * 1000, masterVerb.RateLimit > 0 ? masterVerb.RateLimit : (int?)null);
             if (colaLlena) Console.WriteLine($"Se alcanzó la capacidad de la cola de entrada. Se detiene la inyección de mensajes");
             Console.ResetColor();
 
             // Detener el monitoreo inmediatamente después del test (antes de obtener resultados de slaves)
+            
+            /*
             Dictionary<int, int> profundidades = [];
             if (monitorProfCts != null && taskMonitor != null)
             {
                 monitorProfCts.Cancel();
                 profundidades = await taskMonitor;
                 Console.WriteLine($"Se realizaron {profundidades.Count} lecturas");
-                // Ejemplo de uso: convertir milisegundos a hora
+                
                 foreach (var kvp in profundidades)
                 {
                     TimeSpan tiempo = TimeSpan.FromMilliseconds(kvp.Key);
                     Console.WriteLine($"Tiempo: {tiempo.TotalSeconds:F2}s - Profundidad: {kvp.Value}");
                 }
-            }
+            }*/
 
             List<(int? result, string ipSlave)> resultados = await GetSlavesResultsAsync(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
             PrintResults(resultados, nroMensajesColocados);
@@ -345,6 +350,7 @@ namespace StampedeLoadTester
             return allSlavesInitialized;
         }
 
+
         /// <summary>
         /// Ejecuta el warmup en todos los esclavos remotos
         /// </summary>
@@ -441,10 +447,10 @@ namespace StampedeLoadTester
         }
 
 
-        private static (int messageCounter, bool colaLlena) ExecuteWriteQueueTest(TestManager manager, int numHilos, int durationMs, int delayMicroseconds)
+        private static (int messageCounter, bool colaLlena) ExecuteWriteQueueTest(TestManager manager, int numHilos, int durationMs, int? rateLimit = null)
         {
             TimeSpan duracionEnsayo = TimeSpan.FromMilliseconds(durationMs);
-            return manager.EjecutarWriteQueueLoadTest(duracionEnsayo, numHilos, delayMicroseconds);
+            return manager.EjecutarWriteQueueLoadTest(duracionEnsayo, numHilos, rateLimit);
         }
 
 
@@ -575,20 +581,23 @@ namespace StampedeLoadTester
             Console.ResetColor();
         }
 
-        private static void PrintQueueStatistics(List<(DateTime hora, int profundidad)> mediciones)
+
+        private static void PrintQueueStatistics(List<(DateTime hora, int profundidad)> medicionesProfundidad)
         {
-            if (mediciones == null || mediciones.Count < 4)
+            if (medicionesProfundidad == null || medicionesProfundidad.Count < 4)
             {
+                Console.ForegroundColor = ConsoleColor.Yellow;
                 Console.WriteLine("No hay suficientes mediciones para calcular estadísticas (se requieren al menos 4 mediciones).");
+                Console.ResetColor();
                 return;
             }
 
             Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine("\n================== ESTADÍSTICAS DE PROCESAMIENTO DE COLA ==================");
+            Console.WriteLine("\n============ ESTADÍSTICAS DE PROCESAMIENTO DE COLA ============");
             
             // Descartar primera y última medición - usar índices directamente sin LINQ
             int inicio = 1; // Empezar desde el segundo elemento
-            int fin = mediciones.Count - 2; // Terminar en el penúltimo elemento
+            int fin = medicionesProfundidad.Count - 2; // Terminar en el penúltimo elemento
             
             if (fin < inicio)
             {
@@ -602,8 +611,8 @@ namespace StampedeLoadTester
             
             for (int i = inicio; i <= fin - 1; i++)
             {
-                var medicionActual = mediciones[i];
-                var medicionSiguiente = mediciones[i + 1];
+                var medicionActual = medicionesProfundidad[i];
+                var medicionSiguiente = medicionesProfundidad[i + 1];
                 
                 int profundidadAnterior = medicionActual.profundidad;
                 int profundidadActual = medicionSiguiente.profundidad;

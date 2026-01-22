@@ -15,7 +15,7 @@ namespace StampedeLoadTester.Models
         public string OutputQueue { get; set; } = string.Empty;
 
         [JsonPropertyName("transacciones")]
-        public List<string> Transacciones { get; set; } = [];
+        public string[] Transacciones { get; set; } = [];
 
 
         /// <summary>
