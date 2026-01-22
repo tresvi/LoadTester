@@ -328,7 +328,7 @@ internal sealed class TestManager : IDisposable
     /// </summary>
     /// <param name="queueName">Nombre de la cola a verificar</param>
     /// <param name="timeoutMs">Timeout en milisegundos. Si es null, esperará indefinidamente. Valor por defecto: null</param>
-    /// <param name="pollingIntervalMs">Intervalo en milisegundos entre consultas de profundidad. Valor por defecto: 100ms</param>
+    /// <param name="pollingIntervalMs">Intervalo en milisegundos entre consultas de profundidad.</param>
     /// <returns>true si la cola se vació, false si se alcanzó el timeout</returns>
     public bool WaitForQueueEmptied(string queueName, out List<(DateTime, int)> measurements, int? timeoutMs = null, int pollingIntervalMs = 100)
     {
