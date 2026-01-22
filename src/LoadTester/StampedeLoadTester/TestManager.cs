@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using IBM.WMQ;
 using LoadTester.Plugins;
 using StampedeLoadTester.Models;
+using StampedeLoadTester.Services;
 
 namespace StampedeLoadTester;
 
@@ -86,8 +87,17 @@ internal sealed class TestManager : IDisposable
         return IbmMQPlugin.VaciarCola(_queueManagers[0]!, queueName);
     }
 
-    public (int messageCounter, bool colaLlena) EjecutarWriteQueueLoadTest(TimeSpan duracionEnsayo, int numHilos, int delayMicroseconds)
+    private SimpleRateLimiter? _limiter;
+
+
+    public (int messageCounter, bool colaLlena) EjecutarWriteQueueLoadTest(TimeSpan duracionEnsayo, int numHilos, int? rateLimit = null)
     {
+        // Inicializar el limiter si se especifica rateLimit
+        if (rateLimit.HasValue && rateLimit.Value > 0)
+            _limiter = new SimpleRateLimiter(rateLimit.Value);
+        else
+            _limiter = null;
+
         int messageCounter = 0;
         bool colaLlena = false;
         long tiempoLimiteTicks = (long)(duracionEnsayo.TotalSeconds * Stopwatch.Frequency);
@@ -102,14 +112,14 @@ internal sealed class TestManager : IDisposable
 
             while (!loopState.ShouldExitCurrentIteration && Stopwatch.GetTimestamp() < horaFin)
             {
-                DelayMicroseconds(delayMicroseconds);
-
                 string mensajeAEnviar = _transacciones[ObtenerIndiceSiguienteMensaje()];
 
                 DateTime putDateTime = default;
                 byte[] messageId = null!;
                 try
                 {
+                    // Usar rate limiter si existe
+                    if (_limiter != null) _limiter.Wait();
                     (putDateTime, messageId) = IbmMQPlugin.EnviarMensaje(queueActual, mensajeAEnviar, _messageExpirationSeconds);
                 }
                 catch (MQException mqe) when (mqe.ReasonCode == MQC.MQRC_Q_FULL)
@@ -140,14 +150,11 @@ internal sealed class TestManager : IDisposable
 
     static void DelayMicroseconds(int microseconds)
     {
-        long ticksObjetivo =
-            microseconds * (Stopwatch.Frequency / 1_000_000);
-
+        long ticksObjetivo = microseconds * (Stopwatch.Frequency / 1_000_000);
         long start = Stopwatch.GetTimestamp();
 
         while (Stopwatch.GetTimestamp() - start < ticksObjetivo)
-        {
-        }
+        { }
     }
 
 

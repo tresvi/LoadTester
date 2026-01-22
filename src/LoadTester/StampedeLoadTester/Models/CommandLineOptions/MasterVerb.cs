@@ -34,8 +34,8 @@ public class MasterVerb
     [Option("duration", 'd', true, "Duracion de prueba en segundos.")]
     public int Duration {get; set;}
 
-    [Option("rateLimitDelay", 'r', false, "Delay intencional en microsegundos entre cada mensaje enviado. Actúa como lastre para controlar la tasa de envío y ralentizar la ejecución. Default: 0 (sin delay)")]
-    public int RateLimitDelay {get; set;} = 0;
+    [Option("rateLimit", 'r', false, "Límite de mensajes por segundo a enviar. Si se especifica, controla la tasa de envío. Ejemplo: -r 100 para 100 mensajes/segundo. Default: 0 (sin límite)")]
+    public int RateLimit { get; set; } = 0;
 
     [Flag("ResponsePreview", 'v', "Si está presente, imprime la previsualización de la respuesta de cada transacción")]
     public bool ResponsePreview { get; set; } = false;

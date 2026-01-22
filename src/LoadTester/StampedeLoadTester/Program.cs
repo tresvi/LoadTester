@@ -107,8 +107,8 @@ namespace StampedeLoadTester
                 if (masterVerb.Duration < 0)
                     throw new Exception($"La duracion del ensayo no puede ser negativa. Valor: ({masterVerb.Duration})");
 
-                if (masterVerb.RateLimitDelay < 0)
-                    throw new Exception($"El delay de lastre no puede ser negativo. Valor: ({masterVerb.RateLimitDelay})");
+                if (masterVerb.RateLimit < 0)
+                    throw new Exception($"El límite de mensajes por segundo no puede ser negativo. Valor: ({masterVerb.RateLimit})");
 
                 if (masterVerb.ThreadNumber > Environment.ProcessorCount)
                     throw new Exception($"El nro de hilos ({masterVerb.ThreadNumber}) no puede ser mayor al nro de CPUs ({Environment.ProcessorCount})");
@@ -192,7 +192,7 @@ namespace StampedeLoadTester
             Console.ForegroundColor = ConsoleColor.Green;
             int numHilos = masterVerb.ThreadNumber;
             Console.WriteLine($"{DateTime.Now:HH:mm:ss.ff} - Ejecutando test de carga en el master a {numHilos} hilos, aguarde {masterVerb.Duration} segundos...");
-            (int nroMensajesColocados, bool colaLlena) = ExecuteWriteQueueTest(testManager, numHilos, masterVerb.Duration * 1000, masterVerb.RateLimitDelay);
+            (int nroMensajesColocados, bool colaLlena) = ExecuteWriteQueueTest(testManager, numHilos, masterVerb.Duration * 1000, masterVerb.RateLimit > 0 ? masterVerb.RateLimit : (int?)null);
             if (colaLlena) Console.WriteLine($"Se alcanzó la capacidad de la cola de entrada. Se detiene la inyección de mensajes");
             Console.ResetColor();
 
@@ -441,10 +441,10 @@ namespace StampedeLoadTester
         }
 
 
-        private static (int messageCounter, bool colaLlena) ExecuteWriteQueueTest(TestManager manager, int numHilos, int durationMs, int delayMicroseconds)
+        private static (int messageCounter, bool colaLlena) ExecuteWriteQueueTest(TestManager manager, int numHilos, int durationMs, int? rateLimit = null)
         {
             TimeSpan duracionEnsayo = TimeSpan.FromMilliseconds(durationMs);
-            return manager.EjecutarWriteQueueLoadTest(duracionEnsayo, numHilos, delayMicroseconds);
+            return manager.EjecutarWriteQueueLoadTest(duracionEnsayo, numHilos, rateLimit);
         }
 
 
