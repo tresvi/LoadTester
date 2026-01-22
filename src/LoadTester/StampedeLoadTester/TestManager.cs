@@ -24,7 +24,7 @@ internal sealed class TestManager : IDisposable
     private readonly MQQueue?[] _outputQueues = new MQQueue?[4];
     private readonly string[] _transacciones;
     private readonly int _messageExpirationSeconds;
-
+    private SimpleRateLimiter? _limiter;
 
     public TestManager(string queueManagerName, string outputQueueName, List<Hashtable> connectionProperties, ref string[] transacciones, int messageExpirationSeconds = 0)
     {
@@ -86,8 +86,6 @@ internal sealed class TestManager : IDisposable
 
         return IbmMQPlugin.VaciarCola(_queueManagers[0]!, queueName);
     }
-
-    private SimpleRateLimiter? _limiter;
 
 
     public (int messageCounter, bool colaLlena) EjecutarWriteQueueLoadTest(TimeSpan duracionEnsayo, int numHilos, int? rateLimit = null)

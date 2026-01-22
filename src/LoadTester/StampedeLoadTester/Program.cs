@@ -161,6 +161,11 @@ namespace StampedeLoadTester
                 testManager.EnviarMensajesPrueba();
                 Console.WriteLine(": OK");
 
+                Console.Write("Vaciando cola de respuesta después del warmup...");
+                Thread.Sleep(2000);
+                testManager.VaciarCola(mqConnParams.OutputQueue);
+                Console.WriteLine($": OK");
+
                 if (ipSlaves.Count != 0)
                 {
                     Console.WriteLine("\n\n***********Verificando acceso a instancias en modo slave***********\n");
@@ -185,7 +190,7 @@ namespace StampedeLoadTester
                 return;
             }
 
-            Console.WriteLine("Iniciando monitoreo de profundidad de la cola...");
+            Console.WriteLine("\nIniciando monitoreo de profundidad de la cola...");
             monitorProfCts = new CancellationTokenSource();
             taskMonitor = testManager.MonitorearProfundidadColaAsync(mqConnParams.OutputQueue, monitorProfCts.Token);
 
@@ -203,11 +208,11 @@ namespace StampedeLoadTester
                 monitorProfCts.Cancel();
                 profundidades = await taskMonitor;
                 Console.WriteLine($"Se realizaron {profundidades.Count} lecturas");
-                // Ejemplo de uso: convertir milisegundos a hora
+                
                 foreach (var kvp in profundidades)
                 {
                     TimeSpan tiempo = TimeSpan.FromMilliseconds(kvp.Key);
-                    Console.WriteLine($"Tiempo: {tiempo.TotalSeconds:F2}s - Profundidad: {kvp.Value}");
+                    //Console.WriteLine($"Tiempo: {tiempo.TotalSeconds:F2}s - Profundidad: {kvp.Value}");
                 }
             }
 
@@ -579,7 +584,9 @@ namespace StampedeLoadTester
         {
             if (mediciones == null || mediciones.Count < 4)
             {
+                Console.BackgroundColor = ConsoleColor.Yellow;
                 Console.WriteLine("No hay suficientes mediciones para calcular estadísticas (se requieren al menos 4 mediciones).");
+                Console.ResetColor();
                 return;
             }
 
