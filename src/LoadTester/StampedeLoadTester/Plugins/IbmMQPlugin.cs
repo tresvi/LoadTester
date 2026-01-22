@@ -7,6 +7,8 @@ namespace LoadTester.Plugins
 {
     public class IbmMQPlugin
     {
+        private const int CONSOLE_COL_WIDTH_RESPONSE = 75;
+
         /// <summary>
         /// Realiza un ciclo de PUT sobre la cola de salida y GET sobre la cola de entrada utilizando el texto provisto y devuelve la latencia en ms.
         /// Requiere acceso exclusivo a ambas colas para que el GET tome el mensaje correspondiente.
@@ -113,7 +115,7 @@ namespace LoadTester.Plugins
             => (double)ticks * 1_000_000.0 / Stopwatch.Frequency;
 
 
-        public static (DateTime putDateTime, byte[] messageId) EnviarMensaje(MQQueueManager qmgr, string queueName, string texto)
+        public static (DateTime putDateTime, byte[] messageId) EnviarMensaje(MQQueueManager qmgr, string queueName, string texto, int expirationSeconds = 0)
         {
             MQQueue? cola = null;
             Stopwatch sw = new Stopwatch();
@@ -123,7 +125,7 @@ namespace LoadTester.Plugins
                 int openOptions = MQC.MQOO_OUTPUT;
                 cola = qmgr.AccessQueue(queueName, openOptions);
                 
-                (DateTime putDateTime, byte[] messageId) resultado = EnviarMensaje(cola, texto);
+                (DateTime putDateTime, byte[] messageId) resultado = EnviarMensaje(cola, texto, expirationSeconds);
                 return resultado;
             }
             catch (MQException mqe)
@@ -146,17 +148,28 @@ namespace LoadTester.Plugins
             }
         }
 
-        public static (DateTime putDateTime, byte[] messageId) EnviarMensaje(MQQueue queue, string texto)
+        public static (DateTime putDateTime, byte[] messageId) EnviarMensaje(MQQueue queue, string texto, int expirationSeconds = 0)
         {
-            if (queue is null) throw new ArgumentNullException(nameof(queue));
+            ArgumentNullException.ThrowIfNull(queue);
 
             // Crear el mensaje MQ
-            MQMessage mensaje = new MQMessage
+            MQMessage mensaje = new()
             {
                 Format = MQC.MQFMT_STRING,
                 MessageId = MQC.MQMI_NONE,
                 CorrelationId = MQC.MQCI_NONE
             };
+
+            // En IBM MQ, Expiry se mide en décimas de segundo (0.1 segundos)
+            // Si expirationSeconds es 0, no expira (unlimited)
+            if (expirationSeconds > 0)
+            {
+                mensaje.Expiry = expirationSeconds * 10;    // Convertir segundos a décimas de segundo
+            }
+            else
+            {
+                mensaje.Expiry = MQC.MQEI_UNLIMITED;        // 0 significa que no expira nunca
+            }
 
             mensaje.WriteString(texto);
 
@@ -212,7 +225,7 @@ namespace LoadTester.Plugins
 
         public static double RecibirMensaje(MQQueue queue, byte[]? correlationId = null)
         {
-            if (queue is null) throw new ArgumentNullException(nameof(queue));
+            ArgumentNullException.ThrowIfNull(queue);
 
             var msg = new MQMessage
             {
@@ -223,13 +236,9 @@ namespace LoadTester.Plugins
 
             // Si se proporciona CorrelationID, usarlo para hacer match
             if (correlationId != null && correlationId.Length == 24)
-            {
                 msg.CorrelationId = correlationId;
-            }
             else
-            {
                 msg.CorrelationId = MQC.MQCI_NONE;
-            }
 
             var gmo = new MQGetMessageOptions
             {
@@ -252,10 +261,11 @@ namespace LoadTester.Plugins
         /// </summary>
         /// <param name="queue">Cola de entrada desde donde recibir el mensaje</param>
         /// <param name="correlationId">CorrelationId usado para hacer match del mensaje (debe ser de 24 bytes)</param>
+        /// <param name="showPreview">Si es true, imprime la previsualización de la respuesta</param>
         /// <returns>PutDateTime del mensaje recibido</returns>
-        public static DateTime RecibirMensajeYObtenerPutDateTime(MQQueue queue, byte[] correlationId)
+        public static DateTime RecibirMensajeYObtenerPutDateTime(MQQueue queue, byte[] correlationId, bool showPreview = false)
         {
-            if (queue is null) throw new ArgumentNullException(nameof(queue));
+            ArgumentNullException.ThrowIfNull(queue);
             if (correlationId == null || correlationId.Length != 24)
                 throw new ArgumentException("CorrelationId debe ser un array de 24 bytes", nameof(correlationId));
 
@@ -278,11 +288,19 @@ namespace LoadTester.Plugins
             };
 
             queue.Get(msg, gmo);
-            /*
-            // Leer y imprimir el contenido de la respuesta
-            string contenido = msg.ReadString(msg.MessageLength);
-            Console.WriteLine($"Respuesta: {contenido}");
-           */
+            
+            if (showPreview)
+            {
+                string contenido = msg.ReadString(msg.MessageLength);
+                string preview;
+                
+                if (contenido.Length < CONSOLE_COL_WIDTH_RESPONSE)
+                    preview = contenido;
+                else
+                    preview = contenido.Substring(0, 70) + "...";
+                
+                Console.WriteLine($"Resp:{preview}");
+            }
             
             // Devolver el PutDateTime del mensaje recibido
             return msg.PutDateTime;

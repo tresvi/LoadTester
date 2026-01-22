@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Net;
+using Tresvi.CommandParser.Attributes.Validation;
 using Tresvi.CommandParser.Attributtes.Keywords;
 
 namespace StampedeLoadTester.Models.CommandLineOptions;
@@ -10,13 +11,15 @@ public class MasterVerb
     private const int SLAVE_TIMEOUT_DEFAULT = 5;
     private const string SLAVE_PORT_DEFAULT = "8888";
 
-    [Option("file", 'f', true, "Archivo con la descripcion del ensayo a realizar")]
+    [FileExists()]
+    [Option("file", 'f', true, "Archivo con las transacciones a enviar")]
     public string? File { get; set; }
 
     [Option("slaves", 's', false, "Lista de IPs de los esclavos separados por punto y coma (1.1.1.1;2.2.2.2;3.3.3.3)")]
     public string Slaves { get; set; } = "";
 
     [Option("slavePort", 'p', false, "Puerto donde escucharán los esclavos. Todos los esclavos deberán usar el mismo. Default: " + SLAVE_PORT_DEFAULT )]
+    [Requires(nameof(Slaves))]
     public int SlavePort { get; set; } = int.Parse(SLAVE_PORT_DEFAULT);
 
     [Option("slaveTimeout", 'T', false, "Timeout de espera para que los esclavos respondan al maestro (en segundos). Si se omite, se usará el valor por defecto")]
@@ -31,20 +34,20 @@ public class MasterVerb
     [Option("duration", 'd', true, "Duracion de prueba en segundos.")]
     public int Duration {get; set;}
 
-    [Option("IputQueue", 'i', true, "Cola de entrada para recibir los mensajes.")]
-    public string InputQueue { get; set;} = "";
-
-    [Option("OutputQueue", 'o', true, "Cola de salida para enviar los mensajes.")]
-    public string OutputQueue { get; set;} = "";
-
     [Option("rateLimitDelay", 'r', false, "Delay intencional en microsegundos entre cada mensaje enviado. Actúa como lastre para controlar la tasa de envío y ralentizar la ejecución. Default: 0 (sin delay)")]
     public int RateLimitDelay {get; set;} = 0;
+
+    [Flag("ResponsePreview", 'v', "Si está presente, imprime la previsualización de la respuesta de cada transacción")]
+    public bool ResponsePreview { get; set; } = false;
+
+    [Option("messageExpiration", 'e', false, "Tiempo de expiración en segundos para los mensajes enviados a la cola de pedido. Mínimo: 240 segundos. Si se omite o es 0 (default), los mensajes no expiran nunca.")]
+    public int MessageExpiration { get; set; } = 0;
 
     internal IReadOnlyList<IPAddress> GetSlaves()
     {
         try
         {	
-            if (string.IsNullOrEmpty(Slaves)) return Array.Empty<IPAddress>();
+            if (string.IsNullOrEmpty(Slaves)) return [];
             return Slaves.Split(';').Select(slave => IPAddress.Parse(slave.Trim())).ToList();
         }
         catch (Exception ex)

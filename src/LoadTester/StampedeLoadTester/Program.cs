@@ -12,26 +12,21 @@ using MathNet.Numerics.Statistics;
 using StampedeLoadTester.Models;
 using Tresvi.CommandParser.Attributtes.Keywords;
 
+
 namespace StampedeLoadTester
 {
-    //dotnet run -- -f "xxx" -s "192.168.0.31, 192.168.0.24" -p 8888 -m "192.168.0.31:1414:CHANNEL1:MQGD" -d 2 -i "BNA.XX1.RESPUESTA" -o "BNA.XX1.PEDIDO"
-    //dotnet run -- -f "xxx" -m "10.6.248.10:1414:CHANNEL1:MQGD" -d 2 -i "BNA.CU1.RESPUESTA" -o "BNA.CU1.PEDIDO"
-    //dotnet run -- -f "xxx" -m "10.6.248.10:1414:CHANNEL1:MQGD" -d 2 -i "BNA.CU2.RESPUESTA" -o "BNA.CU2.PEDIDO"
+    //dotnet run -- -f "xxx" -s "192.168.0.31, 192.168.0.24" -p 8888 -m "192.168.0.31;1414;CHANNEL1;MQGD" -d 2 -i "BNA.XX1.RESPUESTA" -o "BNA.XX1.PEDIDO"
+    //dotnet run -- -f ".\TestFiles\" -m "10.6.248.10;1414;CHANNEL1;MQGD" -d 2 -i "BNA.CU1.RESPUESTA" -o "BNA.CU1.PEDIDO"
+    //dotnet run -- -f "xxx" -m "10.6.248.10;1414;CHANNEL1;MQGD" -d 2 -i "BNA.CU2.RESPUESTA" -o "BNA.CU2.PEDIDO"
     //TODO: Cuando se alcanza a ver la cola de msjes de Respuesta vacios, dejar de intentar recuperar las respuestas, porque todos van a dar MQRC_NO_MSG_AVAILABLE eternamente
-    //TODO: Hacer que el ensayo se detenga por cola llena y continue con el siguiente punto
     //TODO: Evaluar si la funcion ClearQueue es necesaria, ya que siempre deberia vaciarlas
-    //TODO: Implementar lectura de trxs desde archivos.
     //TODO: Implementar salida de trxs a archivos
     //TODO: Hacer algun programa de analisis de resultados
-    //TODO: CUando la cola de respuesta se llena, y aun queda contenido en la de pedido el programa se queda indefinidamente esperando a que se vacie para continuar con la recuperacion de mensajes. Ante esto, implementar un timeout, o bien, revisar que si ambas colas se quedan asi, se debe abortar (en el banco la limpiaria automaticamente Q server)
     internal class Program
     {
-        //const string MENSAJE = "    00000008500000020251118115559N0001   000000PC  01100500000000000000                        00307384";
-        //const string MENSAJE = "    00000008500000020251118114435G00111  000000DGPC011005590074200180963317";
+        const int TIME_OUT_VACIADO_DE_COLA_MS = 150_000;
 
-        const string MENSAJE = "    00000777700000020251118114435%XXXXXX%000000  BD011005590074200180963317";
-        
-        const int TIMEOUT_VACIADO_COLA_PEDIDO_MS = 10000;
+        private static string[]? transacciones;
 
         /// <summary>
         /// Crea una lista de Hashtables con las propiedades de conexión MQ basadas en MqConnectionParams
@@ -63,6 +58,7 @@ namespace StampedeLoadTester
         }
 
 
+
         static async Task Main(string[] args)
         {
 
@@ -73,7 +69,7 @@ namespace StampedeLoadTester
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"ERROR validando parametros de entrada: {ex}");
+                Console.Error.WriteLine($"ERROR validando parametros de entrada: {ex.Message}");
                 return;
             }
             
@@ -100,9 +96,11 @@ namespace StampedeLoadTester
             Console.WriteLine($"SlaveTimeout: {masterVerb.SlaveTimeout}");
             Console.WriteLine($"ThreadNumber: {masterVerb.ThreadNumber}");
             Console.WriteLine($"MQConnection: {masterVerb.MqConnection}");
+            Console.WriteLine($"");
 
             IReadOnlyList<IPAddress> ipSlaves;
             MqConnectionParams mqConnParams = new();
+            TransactionFile transactionFile = new();
 
             try
             {
@@ -114,9 +112,21 @@ namespace StampedeLoadTester
 
                 if (masterVerb.ThreadNumber > Environment.ProcessorCount)
                     throw new Exception($"El nro de hilos ({masterVerb.ThreadNumber}) no puede ser mayor al nro de CPUs ({Environment.ProcessorCount})");
+
+                if (masterVerb.MessageExpiration != 0 && masterVerb.MessageExpiration < 240)
+                    throw new Exception($"El tiempo de expiración debe ser al menos 240 segundos o 0 (sin expiración). Valor ingresado: ({masterVerb.MessageExpiration})");
+
+                // Cargar el archivo JSON en la instancia de TransactionFile
+                transactionFile.Load(masterVerb.File!);
                 
+                // Usar las transacciones del JSON
+                if (transactionFile.Transacciones.Count == 0)
+                    throw new Exception($"El archivo JSON {masterVerb.File} debe contener al menos 1 transaccion");
+                
+                transacciones = transactionFile.Transacciones.ToArray();
+
                 ipSlaves = masterVerb.GetSlaves();
-                mqConnParams.LoadMqConnectionParams(masterVerb.MqConnection, masterVerb.OutputQueue, masterVerb.InputQueue);
+                mqConnParams.LoadMqConnectionParams(masterVerb.MqConnection, transactionFile.OutputQueue, transactionFile.InputQueue);
             }
             catch (Exception ex)
             {
@@ -126,26 +136,27 @@ namespace StampedeLoadTester
 
             RemoteControllerService remoteController = new();
             List<Hashtable> connectionProperties = CreateConnectionProperties(mqConnParams);
-            using TestManager testManager = new(mqConnParams.MqManagerName, mqConnParams.OutputQueue, MENSAJE, connectionProperties);
+            using TestManager testManager = new(mqConnParams.MqManagerName, mqConnParams.OutputQueue, connectionProperties, ref transacciones, masterVerb.MessageExpiration);
 
             CancellationTokenSource? monitorProfCts = null;
             Task<Dictionary<int, int>>? taskMonitor = null;
 
             try
             {
+                Console.ForegroundColor = ConsoleColor.Green;
+
                 Console.Write("Inicializando conexiones MQ en el master...");
                 testManager.InicializarConexiones();
                 Console.WriteLine(": OK");
 
-                Console.Write("Vaciando cola de pedido...");
+                Console.Write($"Vaciando cola de pedido {transactionFile.InputQueue}...");
                 float msjesEliminadosPorSegundo = testManager.VaciarCola(mqConnParams.OutputQueue);
                 Console.WriteLine($": OK ({msjesEliminadosPorSegundo:F2} msjes/s)");
 
-                Console.Write("Vaciando cola de respuesta...");
+                Console.Write($"Vaciando cola de respuesta {transactionFile.OutputQueue}...");
                 msjesEliminadosPorSegundo = testManager.VaciarCola(mqConnParams.InputQueue);
                 Console.WriteLine($": OK ({msjesEliminadosPorSegundo:F2} msjes/s)");
 
-                Console.ForegroundColor = ConsoleColor.Green;
                 Console.Write("Realizando WarmUp en el master...");
                 testManager.EnviarMensajesPrueba();
                 Console.WriteLine(": OK");
@@ -203,15 +214,12 @@ namespace StampedeLoadTester
             List<(int? result, string ipSlave)> resultados = await GetSlavesResultsAsync(remoteController, ipSlaves, masterVerb.SlavePort, masterVerb.SlaveTimeout);
             PrintResults(resultados, nroMensajesColocados);
 
-            Console.Write($"\nEsperando que se procesen todos los mensajes de la cola {mqConnParams.OutputQueue} ...");
-            List<(DateTime hora, int profundidad)> medicionesProfundColaPedido = [];
-            bool colaPedidoVaciada = testManager.WaitForQueueEmptied(mqConnParams.OutputQueue, out medicionesProfundColaPedido, TIMEOUT_VACIADO_COLA_PEDIDO_MS);
-            if (colaPedidoVaciada) 
-                Console.WriteLine($": OK");
-            else
-                Console.WriteLine($": NO . La cola de pedido no se vacio en el tiempo establecido. Se continua la ejecución");
-            
-            PrintQueueStatistics(medicionesProfundColaPedido);
+            Console.Write($"\nEsperando a que se procesen todos los mensajes de la cola {mqConnParams.OutputQueue} ...");
+            List<(DateTime hora, int profundidad)> medicionesProfundidad = [];
+            testManager.WaitForQueueEmptied(mqConnParams.OutputQueue, out medicionesProfundidad, TIME_OUT_VACIADO_DE_COLA_MS);
+            Console.WriteLine($": OK");
+
+            PrintQueueStatistics(medicionesProfundidad);
             
             Console.WriteLine($"Recibiendo respuestas y actualizando put date time...");
 
@@ -223,7 +231,7 @@ namespace StampedeLoadTester
                 .OrderBy(m => m.RequestPutDateTime)
                 .ToList();
 
-            testManager.RecibirRespuestasYActualizarPutDateTime(mensajesEnviadosOrdenados, mqConnParams.InputQueue);
+            testManager.RecibirRespuestasYActualizarPutDateTime(mensajesEnviadosOrdenados, mqConnParams.InputQueue, masterVerb.ResponsePreview);
             
             PrintMessagesResults2(mensajesEnviadosOrdenados);
 
@@ -251,6 +259,14 @@ namespace StampedeLoadTester
             {
                 if (slaveVerb.RateLimitDelay < 0)
                     throw new Exception($"El delay de lastre no puede ser negativo. Valor: ({slaveVerb.RateLimitDelay})");
+
+                if (slaveVerb.MessageExpiration != 0 && slaveVerb.MessageExpiration < 240)
+                    throw new Exception($"El tiempo de expiración debe ser al menos 240 segundos o 0 (sin expiración). Valor ingresado: ({slaveVerb.MessageExpiration})");
+                
+                //TODO: Implementar esto en escalvos. 
+                // List<string> transacciones = File.ReadAllLines(slaveVerb.File!);
+                //if (transacciones.Length == 0)
+                //    throw new Exception($"El archivo de entrada {masterVerb.File} debe contener al menos 1 transaccion");
                 
                 mqConnectionParams.LoadMqConnectionParams(slaveVerb.MqConnection, slaveVerb.OutputQueue, slaveVerb.InputQueue);
             }
@@ -263,7 +279,7 @@ namespace StampedeLoadTester
             List<Hashtable> connectionProperties = CreateConnectionProperties(mqConnectionParams);
             var remoteManager = new RemoteControllerService();
             var cts = new CancellationTokenSource();
-            remoteManager.Listen(slaveVerb.Port, cts.Token, mqConnectionParams.MqManagerName, mqConnectionParams.OutputQueue, MENSAJE, connectionProperties);
+            remoteManager.Listen(slaveVerb.Port, cts.Token, mqConnectionParams.MqManagerName, mqConnectionParams.OutputQueue, connectionProperties, slaveVerb.MessageExpiration);
         }
 
 
@@ -491,9 +507,9 @@ namespace StampedeLoadTester
                 if (tiempoTotalSegundos > 0)
                 {
                     double throughput = totalMensajes / tiempoTotalSegundos;
-                    Console.WriteLine($"\n---------------- Throughput de Cola de Pedido -----------------");
+                    Console.WriteLine($"\n---------------- Throughput de cola de Pedido -----------------");
                     Console.WriteLine($"Tiempo total de envío:   {tiempoTotalSegundos:F2} s");
-                    Console.WriteLine($"Throughput:              {throughput:F2} mensajes/segundo");
+                    Console.WriteLine($"Throughput:              {throughput:F2} msjes/seg");
                     
                     // Throughput de respuestas recibidas
                     if (mensajesConRespuesta > 0)

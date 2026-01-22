@@ -46,8 +46,35 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Files\InputFiles\" />
-    <Folder Include="Files\TestSamples\" />
+    <None Update="TestFiles\Desa\trx_0500_simple.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="TestFiles\Desa\trx_0559_164users.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="TestFiles\Desa\trx_0559_simple.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="TestFiles\Desa\trx_1559_164users.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="TestFiles\QA\trx_0500_simple.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="TestFiles\QA\trx_0559_164users.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="TestFiles\QA\trx_0559_simple.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="TestFiles\QA\trx_1559_164users.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="TestFiles\Desa\" />
+    <Folder Include="TestFiles\QA\" />
   </ItemGroup>
 
 </Project>

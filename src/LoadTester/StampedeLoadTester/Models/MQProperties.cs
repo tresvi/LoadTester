@@ -2,7 +2,7 @@ namespace StampedeLoadTester.Models
 {
     internal class MQProperties
     {
-        public string HostName { get; set; } = "10.6.248.10";
+        public string HostName { get; set; } = "";
         
         public int Port { get; set; } = 1414;
         

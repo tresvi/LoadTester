@@ -38,7 +38,7 @@ namespace StampedeLoadTester.Models
             if (string.IsNullOrWhiteSpace(ip))
                 throw new ArgumentException("La IP del servidor MQ no puede estar vacía.");
             
-            if (!IPAddress.TryParse(ip, out IPAddress? ipAddress))
+            if (!IPAddress.TryParse(ip, out IPAddress? _))
                 throw new ArgumentException($"La IP '{ip}' no es una dirección IP válida (IPv4 o IPv6).");
 
             string portStr = partes[1].Trim();

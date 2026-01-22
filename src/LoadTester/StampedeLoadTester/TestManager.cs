@@ -12,26 +12,26 @@ namespace StampedeLoadTester;
 
 internal sealed class TestManager : IDisposable
 {
-
+    private const int WARMUP_MSG_EXPIRATION_SECONDS = 2;
 
     public List<MensajeEnviado>[]? MensajesEnviados {get; private set;}
 
     private readonly string _queueManagerName;
     private readonly string _outputQueueName;
-    private readonly string _mensaje;
     private readonly List<Hashtable> _connectionProperties;
     private readonly MQQueueManager?[] _queueManagers = new MQQueueManager?[4];
     private readonly MQQueue?[] _outputQueues = new MQQueue?[4];
-    
-    private static int _contadorSegmento = 0;
-    private const int MAX_SEGMENTOS = 164;
+    private readonly string[] _transacciones;
+    private readonly int _messageExpirationSeconds;
 
-    public TestManager(string queueManagerName, string outputQueueName, string mensaje, List<Hashtable> connectionProperties)
+
+    public TestManager(string queueManagerName, string outputQueueName, List<Hashtable> connectionProperties, ref string[] transacciones, int messageExpirationSeconds = 0)
     {
         _queueManagerName = queueManagerName;
         _outputQueueName = outputQueueName;
-        _mensaje = mensaje;
         _connectionProperties = connectionProperties;
+        _transacciones = transacciones;
+        _messageExpirationSeconds = messageExpirationSeconds;
         MensajesEnviados = null; // Se inicializará cuando se ejecute EjecutarWriteQueueLoadTest
     }
 
@@ -103,18 +103,14 @@ internal sealed class TestManager : IDisposable
             while (!loopState.ShouldExitCurrentIteration && Stopwatch.GetTimestamp() < horaFin)
             {
                 DelayMicroseconds(delayMicroseconds);
-                
-                // Incrementar contador de forma thread-safe y obtener valor entre 1 y 164
-                int valorSegmento = (Interlocked.Increment(ref _contadorSegmento) - 1) % MAX_SEGMENTOS + 1;
-                string segmentoReemplazo = $"D{valorSegmento:D5}  "; // 8 caracteres: "D" + 5 dígitos + 2 espacios
-                string mensajeConSegmento = _mensaje.Replace("%XXXXXX%", segmentoReemplazo);
-                //System.Console.WriteLine(mensajeConSegmento);    //!!!!
+
+                string mensajeAEnviar = _transacciones[ObtenerIndiceSiguienteMensaje()];
 
                 DateTime putDateTime = default;
                 byte[] messageId = null!;
                 try
                 {
-                    (putDateTime, messageId) = IbmMQPlugin.EnviarMensaje(queueActual, mensajeConSegmento);
+                    (putDateTime, messageId) = IbmMQPlugin.EnviarMensaje(queueActual, mensajeAEnviar, _messageExpirationSeconds);
                 }
                 catch (MQException mqe) when (mqe.ReasonCode == MQC.MQRC_Q_FULL)
                 {
@@ -155,31 +151,6 @@ internal sealed class TestManager : IDisposable
     }
 
 
-    public int EjecutarHilosInquire(TimeSpan duracionEnsayo, int numHilos)
-    {
-        int messageCounter = 0;
-        long tiempoLimiteTicks = (long)(duracionEnsayo.TotalSeconds * Stopwatch.Frequency);
-
-        Parallel.For(0, numHilos, hiloIndex =>
-        {
-            MQQueue queueActual = _outputQueues[hiloIndex % _outputQueues.Length]!;
-            long horaInicio = Stopwatch.GetTimestamp();
-            long horaFin = horaInicio + tiempoLimiteTicks;
-
-            while (Stopwatch.GetTimestamp() < horaFin)
-            {
-                IbmMQPlugin.EnviarMensaje(queueActual, _mensaje);
-                Interlocked.Increment(ref messageCounter);
-            }
-
-            double elapsedMs = (Stopwatch.GetTimestamp() - horaInicio) * 1000.0 / Stopwatch.Frequency;
-            Console.WriteLine($"Hilo {hiloIndex} tardó {elapsedMs:F2} ms");
-        });
-
-        return messageCounter;
-    }
-
-
     public void EnviarMensajesPrueba(int mensajesPorConexion = 1)
     {
         foreach (MQQueue? queue in _outputQueues)
@@ -188,7 +159,8 @@ internal sealed class TestManager : IDisposable
 
             for (int i = 0; i < mensajesPorConexion; i++)
             {
-                IbmMQPlugin.EnviarMensaje(queue, _mensaje);
+                int nroMensaje = ObtenerIndiceSiguienteMensaje();
+                IbmMQPlugin.EnviarMensaje(queue, _transacciones[nroMensaje], WARMUP_MSG_EXPIRATION_SECONDS);
             }
         }
     }
@@ -302,7 +274,8 @@ internal sealed class TestManager : IDisposable
     /// </summary>
     /// <param name="mensajesEnviados">Lista unificada de mensajes enviados, ordenada por RequestPutDateTime</param>
     /// <param name="inputQueueName">Nombre de la cola de entrada de donde se recibirán los mensajes</param>
-    public void RecibirRespuestasYActualizarPutDateTime(List<MensajeEnviado> mensajesEnviados, string inputQueueName)
+    /// <param name="showPreview">Si es true, imprime la previsualización de cada respuesta</param>
+    public void RecibirRespuestasYActualizarPutDateTime(List<MensajeEnviado> mensajesEnviados, string inputQueueName, bool showPreview = false)
     {
         ArgumentNullException.ThrowIfNull(mensajesEnviados, nameof(mensajesEnviados));
         if (_queueManagers[0] is null) throw new InvalidOperationException("Las conexiones no están inicializadas");
@@ -328,7 +301,7 @@ internal sealed class TestManager : IDisposable
                 try
                 {
                     // Hacer GET usando el MessageId como CorrelationId
-                    DateTime putDateTime = IbmMQPlugin.RecibirMensajeYObtenerPutDateTime(inputQueue, mensajeEnviado.MessageId);
+                    DateTime putDateTime = IbmMQPlugin.RecibirMensajeYObtenerPutDateTime(inputQueue, mensajeEnviado.MessageId, showPreview);
                     mensajeEnviado.ResponsePutDateTime = putDateTime;
                     mensajesEnviados[i] = mensajeEnviado;
                 }
@@ -405,6 +378,23 @@ internal sealed class TestManager : IDisposable
             }
         }
     }
+
+
+    private static int _indiceTransaccion = -1;
+    //private string ObtenerMensaje()
+    private string ObtenerSiguienteMensaje()
+    {
+        int indice = Interlocked.Increment(ref _indiceTransaccion) % _transacciones.Length;
+        return _transacciones[indice];
+    }
+
+
+    private int ObtenerIndiceSiguienteMensaje()
+    {
+        int indice = Interlocked.Increment(ref _indiceTransaccion) % _transacciones.Length;
+        return indice;
+    }
+
 
     public void Dispose()
     {

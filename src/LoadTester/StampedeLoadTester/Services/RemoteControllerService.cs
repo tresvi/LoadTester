@@ -26,18 +26,9 @@ namespace StampedeLoadTester.Services;
         private const string ACK_MESSAGE = "ACK";
         private const string ERROR_MESSAGE = "ERROR";
         private const string RESULT_PREFIX = "RESULT:";
-
-        private TestDefinition? _testDefinition;
-
         private int? _lastMessageCounter = null;
 
-        /// <summary>
-        /// Establece la definición de prueba que se usará para inicializar las conexiones
-        /// </summary>
-        public void SetTestDefinition(TestDefinition testDefinition)
-        {
-            _testDefinition = testDefinition;
-        }
+
 
     /// <summary>
     /// Envía un mensaje "ping" a la IP y puerto especificados y espera bloqueado una respuesta "pong"
@@ -98,7 +89,11 @@ namespace StampedeLoadTester.Services;
     /// </summary>
     /// <param name="port">Puerto en el que escuchar</param>
     /// <param name="cancellationToken">Token para cancelar la escucha</param>
-    public void Listen(int port, CancellationToken cancellationToken,string queueManagerName, string outputQueueName, string mensaje, List<Hashtable> connectionProperties)
+    /// <param name="queueManagerName">Nombre del queue manager</param>
+    /// <param name="outputQueueName">Nombre de la cola de salida</param>
+    /// <param name="connectionProperties">Propiedades de conexión MQ</param>
+    /// <param name="messageExpirationSeconds">Tiempo de expiración en segundos para los mensajes (0 = sin expiración)</param>
+    public void Listen(int port, CancellationToken cancellationToken,string queueManagerName, string outputQueueName, List<Hashtable> connectionProperties, int messageExpirationSeconds = 0)
     {
         UdpClient? listener = null;
         try
@@ -106,7 +101,9 @@ namespace StampedeLoadTester.Services;
             listener = new UdpClient(port);
             listener.Client.ReceiveTimeout = 5000;
             Console.WriteLine($"Escuchando comandos en puerto {port}...");
-            using TestManager manager = new(queueManagerName, outputQueueName, mensaje, connectionProperties);
+            //TODO: Obtener los mensajes para enviar en modo esclavo.
+            string[] algo ={"hola"};
+            using TestManager manager = new(queueManagerName, outputQueueName, connectionProperties, ref algo, messageExpirationSeconds);
 
             while (!cancellationToken.IsCancellationRequested)
             {
