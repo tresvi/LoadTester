@@ -654,18 +654,18 @@ namespace StampedeLoadTester
             double p99 = Statistics.Percentile(mensajesPorSegundo, 99);
 
             Console.WriteLine($"Total de intervalos analizados: {mensajesPorSegundo.Count}");
-            Console.WriteLine($"\n----------- Velocidad de Procesamiento MQ+Mainframe ----------");
-            Console.WriteLine($"Promedio:              {promedio:F2} mensajes/segundo");
-            Console.WriteLine($"Desviación estándar:   {desviacionEstandar:F2} mensajes/segundo");
-            Console.WriteLine($"Mínimo:                {minimo:F2} mensajes/segundo");
-            Console.WriteLine($"Máximo:                {maximo:F2} mensajes/segundo");
+            Console.WriteLine($"\n----------- throughput de Procesamiento MQ+Mainframe ----------");
+            Console.WriteLine($"Promedio:              {promedio:F2} msjes/segundo");
+            Console.WriteLine($"Desviación estándar:   {desviacionEstandar:F2} msjes/segundo");
+            Console.WriteLine($"Mínimo:                {minimo:F2} msjes/segundo");
+            Console.WriteLine($"Máximo:                {maximo:F2} msjes/segundo");
 
             Console.WriteLine($"\n------------------------ Percentiles -------------------------");
-            Console.WriteLine($"P25:                   {p25:F2} mensajes/segundo");
-            Console.WriteLine($"P50 (Mediana):         {p50:F2} mensajes/segundo");
-            Console.WriteLine($"P75:                   {p75:F2} mensajes/segundo");
-            Console.WriteLine($"P95:                   {p95:F2} mensajes/segundo");
-            Console.WriteLine($"P99:                   {p99:F2} mensajes/segundo");
+            Console.WriteLine($"P25:                   {p25:F2} msjes/segundo");
+            Console.WriteLine($"P50 (Mediana):         {p50:F2} msjes/segundo");
+            Console.WriteLine($"P75:                   {p75:F2} msjes/segundo");
+            Console.WriteLine($"P95:                   {p95:F2} msjes/segundo");
+            Console.WriteLine($"P99:                   {p99:F2} msjes/segundo");
 
             // Estadística adicional: Coeficiente de variación
             double coeficienteVariacion = promedio > 0 ? (desviacionEstandar / promedio) * 100 : 0;
