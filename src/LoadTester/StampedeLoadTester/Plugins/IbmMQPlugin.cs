@@ -155,6 +155,7 @@ namespace LoadTester.Plugins
             // Crear el mensaje MQ
             MQMessage mensaje = new()
             {
+                CharacterSet  = 1208,
                 Format = MQC.MQFMT_STRING,
                 MessageId = MQC.MQMI_NONE,
                 CorrelationId = MQC.MQCI_NONE
